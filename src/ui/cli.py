@@ -129,7 +129,7 @@ def menu_search(app: App) -> None:
         return
 
     labels = [f"{s.label()} [{s.source}]" for s in unique]
-    idx = pick_from_list(console, labels, f"Hasil '{query}' ({len(unique)})", page_size=15)
+    idx = pick_from_list(console, labels, f"Hasil '{query}'")
     if idx is not None:
         _inject_flow(app, unique[idx])
     _pause()
@@ -304,7 +304,7 @@ def menu_restore(app: App) -> None:
         for b in backups
     ]
     labels.append(">>> Restore SEMUA backup")
-    idx = pick_from_list(console, labels, "Restore Default Skin", page_size=15)
+    idx = pick_from_list(console, labels, "Restore")
     if idx is None:
         return
 
