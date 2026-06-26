@@ -16,6 +16,7 @@ from .config import CACHE_DIR
 from .errors import ApiError
 from .models import SkinItem
 from .name_resolver import build_name_corpus, resolve_category_label
+from .skin_grade import SKIN_GRADES, detect_skin_grade
 
 # Kategori efek dari API (POST getEmotes + category)
 EFFECT_CATEGORIES: list[tuple[str, str]] = [
@@ -460,3 +461,36 @@ class ApiClient:
         if not category:
             return []
         return self.get_upgrade_skins(category, refresh=refresh)
+
+    def grade_counts_for_role(self, role: str, refresh: bool = False) -> dict[str, int]:
+        """Jumlah hero per grade skin yang tersedia di role."""
+        counts: dict[str, int] = {key: 0 for _label, key in SKIN_GRADES}
+        for hero in self.list_heroes_by_role(role, refresh=refresh):
+            grade = self._hero_grade_match(hero, refresh=refresh)
+            for g, skin in grade.items():
+                if skin and g in counts:
+                    counts[g] += 1
+        return counts
+
+    def _hero_grade_match(
+        self, hero: str, refresh: bool = False
+    ) -> dict[str, SkinItem | None]:
+        """Satu skin per grade untuk hero (prioritas entry pertama)."""
+        found: dict[str, SkinItem | None] = {key: None for _label, key in SKIN_GRADES}
+        for skin in self.get_skins_for_hero(hero, refresh=refresh):
+            grade = detect_skin_grade(skin)
+            if grade and found.get(grade) is None:
+                found[grade] = skin
+        return found
+
+    def find_skins_for_role_grade(
+        self, role: str, grade: str, refresh: bool = False
+    ) -> list[tuple[str, SkinItem]]:
+        """Daftar (hero, skin) yang punya grade tertentu dalam role."""
+        out: list[tuple[str, SkinItem]] = []
+        for hero in self.list_heroes_by_role(role, refresh=refresh):
+            for skin in self.get_skins_for_hero(hero, refresh=refresh):
+                if detect_skin_grade(skin) == grade:
+                    out.append((hero, skin))
+                    break
+        return out

@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from rich.console import Console
 
-VERSION = "1.7.0"
+VERSION = "1.8.0"
 
 _MENU: list[tuple[str, str]] = [
     ("1", "Browse Hero"),
@@ -22,6 +22,7 @@ _MENU: list[tuple[str, str]] = [
     ("10", "Refresh Index"),
     ("11", "Settings"),
     ("12", "Backup Official"),
+    ("13", "Advanced — Batch Apply"),
     ("0", "Keluar"),
 ]
 

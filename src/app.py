@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import logging
-from typing import Optional
+from dataclasses import dataclass, field
+from typing import Callable, Optional
 
 from .api_client import ApiClient
 from .backends import StorageBackend, pick_backend
@@ -20,6 +21,20 @@ from .search import SearchIndex
 from .config import LOG_DIR, ROOT_DIR
 
 LOG = logging.getLogger(__name__)
+
+
+@dataclass
+class BatchInjectResult:
+    ok: list[tuple[str, str]] = field(default_factory=list)
+    failed: list[tuple[str, str]] = field(default_factory=list)
+
+    @property
+    def success_count(self) -> int:
+        return len(self.ok)
+
+    @property
+    def fail_count(self) -> int:
+        return len(self.failed)
 
 
 class App:
@@ -128,6 +143,33 @@ class App:
             reporter=reporter or NullReporter(),
         )
         return result.message
+
+    def inject_batch(
+        self,
+        skins: list[tuple[str, SkinItem]],
+        *,
+        on_hero_start: Callable[[int, int, str, SkinItem], None] | None = None,
+        on_hero_done: Callable[[int, int, str, bool, str], None] | None = None,
+    ) -> BatchInjectResult:
+        if not self.injector or not self.package or not self.assets_path:
+            raise InjectorError("App belum di-init dengan benar")
+
+        total = len(skins)
+        result = BatchInjectResult()
+        for i, (hero, skin) in enumerate(skins, 1):
+            if on_hero_start:
+                on_hero_start(i, total, hero, skin)
+            try:
+                msg = self.inject_skin(skin, reporter=NullReporter())
+                result.ok.append((hero, msg))
+                if on_hero_done:
+                    on_hero_done(i, total, hero, True, msg)
+            except Exception as e:
+                err = str(e)
+                result.failed.append((hero, err))
+                if on_hero_done:
+                    on_hero_done(i, total, hero, False, err)
+        return result
 
     def restore_default(
         self,

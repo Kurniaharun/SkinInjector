@@ -14,6 +14,7 @@ from ..app import App
 from ..errors import InjectorError
 from ..models import SkinItem
 from ..api_client import HERO_ROLES
+from ..skin_grade import SKIN_GRADES, grade_label
 from .branding import print_banner, print_goodbye, print_status, render_menu
 from .console import make_console
 from .picker import pick_from_list, pick_skin_labels
@@ -479,6 +480,148 @@ def menu_status(app: App) -> None:
     _pause()
 
 
+def menu_advanced_batch(app: App) -> None:
+    console.print("\n[bold]Advanced — Batch Apply[/]")
+    console.print(
+        "[dim]Inject satu tipe skin ke semua hero dalam role yang punya skin tersebut.[/]"
+    )
+    console.print("[yellow]Tutup MLBB sebelum batch inject.[/]\n")
+
+    roles = list(HERO_ROLES)
+    try:
+        cats = app.api.get_role_categories()
+        api_roles = [str(x.get("name", "")) for x in cats if x.get("name")]
+        if api_roles:
+            roles = api_roles
+    except Exception as e:
+        LOG.warning("role categories: %s", e)
+
+    ridx = pick_from_list(console, roles, "Pilih Role Hero")
+    if ridx is None:
+        return
+    role = roles[ridx]
+
+    try:
+        counts = run_busy(
+            console,
+            f"Scan {role}...",
+            lambda: app.api.grade_counts_for_role(role),
+        )
+        heroes_in_role = run_busy(
+            console,
+            "Loading...",
+            lambda: app.api.list_heroes_by_role(role),
+        )
+    except Exception as e:
+        console.print(f"[red]{e}[/]")
+        _pause()
+        return
+
+    grade_labels: list[str] = []
+    grade_keys: list[str] = []
+    for label, key in SKIN_GRADES:
+        n = counts.get(key, 0)
+        if n > 0:
+            grade_labels.append(f"{label} ({n}/{len(heroes_in_role)} hero)")
+            grade_keys.append(key)
+
+    if not grade_labels:
+        console.print(f"[yellow]Tidak ada skin bertipe standar untuk role {role}.[/]")
+        _pause()
+        return
+
+    console.print(f"\n[bold]{role}[/]  [dim]{len(heroes_in_role)} hero[/]")
+    gidx = pick_from_list(console, grade_labels, "Pilih Tipe Skin")
+    if gidx is None:
+        return
+
+    grade = grade_keys[gidx]
+    try:
+        matches = run_busy(
+            console,
+            "Menyiapkan daftar...",
+            lambda: app.api.find_skins_for_role_grade(role, grade),
+        )
+    except Exception as e:
+        console.print(f"[red]{e}[/]")
+        _pause()
+        return
+
+    if not matches:
+        console.print(f"[yellow]Tidak ada hero {role} dengan skin {grade_label(grade)}.[/]")
+        _pause()
+        return
+
+    console.print(f"\n[bold]Preview[/] — {grade_label(grade)} → {len(matches)} hero")
+    table = Table(show_header=True, header_style="bold cyan")
+    table.add_column("#", style="dim", width=4)
+    table.add_column("Hero")
+    table.add_column("Skin")
+    for i, (hero, skin) in enumerate(matches, 1):
+        table.add_row(str(i), hero, skin.label())
+    console.print(table)
+
+    if not _confirm(
+        f"\n[yellow]Batch inject[/] [bold]{grade_label(grade)}[/] ke "
+        f"[bold]{len(matches)}[/] hero [cyan]{role}[/]?\n"
+        "[dim]Proses bisa lama. Jangan buka MLBB.[/]",
+        "Lanjut batch inject? (y/N): ",
+    ):
+        _pause()
+        return
+
+    ok_n = 0
+    fail_n = 0
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[bold]{task.description}"),
+        BarColumn(bar_width=32),
+        TaskProgressColumn(),
+        console=console,
+    ) as progress:
+        task = progress.add_task("Memulai...", total=len(matches))
+
+        def on_start(cur: int, total: int, hero: str, skin: SkinItem) -> None:
+            progress.update(
+                task,
+                completed=cur - 1,
+                description=f"[cyan]{hero}[/] — {skin.skin_name[:40]}",
+            )
+
+        def on_done(cur: int, total: int, hero: str, success: bool, msg: str) -> None:
+            nonlocal ok_n, fail_n
+            if success:
+                ok_n += 1
+            else:
+                fail_n += 1
+            progress.update(
+                task,
+                completed=cur,
+                description=f"{'[green]OK' if success else '[red]FAIL'}[/] {hero}",
+            )
+
+        try:
+            result = app.inject_batch(
+                matches,
+                on_hero_start=on_start,
+                on_hero_done=on_done,
+            )
+        except InjectorError as e:
+            console.print(f"[red]{e}[/]")
+            _pause()
+            return
+
+    console.print(
+        f"\n[bold]Selesai[/] — [green]{result.success_count} OK[/]"
+        f"{f', [red]{result.fail_count} gagal[/]' if result.fail_count else ''}"
+    )
+    if result.failed:
+        console.print("\n[red]Gagal:[/]")
+        for hero, err in result.failed:
+            console.print(f"  [dim]•[/] {hero}: {err}")
+    _pause()
+
+
 def menu_settings(app: App) -> None:
     section = pick_from_list(
         console,
@@ -564,6 +707,7 @@ def run_interactive(app: App) -> None:
         "10": menu_refresh_full,
         "11": menu_settings,
         "12": menu_api_backup,
+        "13": menu_advanced_batch,
     }
 
     while True:
