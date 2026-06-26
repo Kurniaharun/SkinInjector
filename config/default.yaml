@@ -1,0 +1,42 @@
+api:
+  base: "https://imb.expressme.in/api/public_connection"
+  config_endpoint: "getConnection.php"
+  timeout: 30
+  user_agent: "MLBB-Skin-Injector/1.0 Termux"
+
+paths:
+  storage_root: "/storage/emulated/0"
+  mlbb_assets_subpath: "files/dragon2017/assets"
+
+access:
+  mode: "auto"
+  noroot_backend: "shizuku"
+  fallback: true
+  shell_timeout: 120
+
+packages:
+  - "com.mobile.legends"
+  - "com.vng.mlbbvn"
+  - "com.mobilelegends.hwag"
+
+inject:
+  temp_zip_name: "IMB.zip"
+  backup_before_inject: true
+  auto_rollback_on_fail: true
+
+download:
+  chunk_size: 8192
+  max_retries: 3
+  min_zip_bytes: 1024
+
+cache:
+  endpoints_ttl_hours: 24
+  heroes_ttl_hours: 6
+  skins_ttl_hours: 1
+
+search:
+  fuzzy_threshold: 55
+  max_results: 25
+
+ui:
+  language: "id"

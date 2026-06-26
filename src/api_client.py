@@ -1,0 +1,178 @@
+"""API client for imb.expressme.in (same source as iMOBA APK)."""
+
+from __future__ import annotations
+
+import json
+import logging
+import time
+from pathlib import Path
+from typing import Any, Optional
+
+import requests
+
+from .config import CACHE_DIR
+from .errors import ApiError
+from .models import SkinItem
+
+LOG = logging.getLogger(__name__)
+
+
+class ApiClient:
+    def __init__(self, cfg: dict) -> None:
+        self.cfg = cfg
+        api = cfg["api"]
+        self.base = api["base"].rstrip("/")
+        self.timeout = int(api.get("timeout", 30))
+        self.ua = api.get("user_agent", "MLBB-Skin-Injector/1.0")
+        self.session = requests.Session()
+        self.session.headers.update({"User-Agent": self.ua})
+        self._endpoints: dict[str, str] = {}
+
+    def _cache_path(self, key: str) -> Path:
+        safe = key.replace("/", "_").replace("?", "_")
+        return CACHE_DIR / f"{safe}.json"
+
+    def _read_cache(self, key: str, ttl_hours: float) -> Optional[Any]:
+        path = self._cache_path(key)
+        if not path.exists():
+            return None
+        age_h = (time.time() - path.stat().st_mtime) / 3600
+        if age_h > ttl_hours:
+            return None
+        try:
+            with open(path, encoding="utf-8") as f:
+                return json.load(f)
+        except (json.JSONDecodeError, OSError):
+            return None
+
+    def _write_cache(self, key: str, data: Any) -> None:
+        path = self._cache_path(key)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+
+    def _get(self, url: str) -> Any:
+        try:
+            r = self.session.get(url, timeout=self.timeout)
+            r.raise_for_status()
+            return r.json()
+        except requests.RequestException as e:
+            raise ApiError(f"GET gagal {url}: {e}") from e
+        except json.JSONDecodeError as e:
+            raise ApiError(f"Response bukan JSON: {url}") from e
+
+    def _post(self, url: str, data: dict[str, str]) -> Any:
+        try:
+            r = self.session.post(url, data=data, timeout=self.timeout)
+            r.raise_for_status()
+            return r.json()
+        except requests.RequestException as e:
+            raise ApiError(f"POST gagal {url}: {e}") from e
+        except json.JSONDecodeError as e:
+            raise ApiError(f"Response bukan JSON: {url}") from e
+
+    def load_endpoints(self, refresh: bool = False) -> dict[str, str]:
+        if self._endpoints and not refresh:
+            return self._endpoints
+        ttl = float(self.cfg.get("cache", {}).get("endpoints_ttl_hours", 24))
+        cached = None if refresh else self._read_cache("endpoints", ttl)
+        if cached:
+            self._endpoints = {item["name"]: item["value"] for item in cached}
+            return self._endpoints
+        url = f"{self.base}/{self.cfg['api']['config_endpoint']}"
+        raw = self._get(url)
+        if not isinstance(raw, list):
+            raise ApiError("Format getConnection tidak valid")
+        self._write_cache("endpoints", raw)
+        self._endpoints = {item["name"]: item["value"] for item in raw}
+        LOG.info("Loaded %d endpoints", len(self._endpoints))
+        return self._endpoints
+
+    def endpoint(self, name: str) -> str:
+        eps = self.load_endpoints()
+        if name not in eps:
+            raise ApiError(f"Endpoint '{name}' tidak ada di config server")
+        return eps[name]
+
+    def get_upgrade_menu(self, refresh: bool = False) -> list[dict[str, Any]]:
+        ttl = float(self.cfg.get("cache", {}).get("heroes_ttl_hours", 6))
+        key = "getlistUpgradeSkins"
+        if not refresh:
+            c = self._read_cache(key, ttl)
+            if c is not None:
+                return c
+        data = self._get(self.endpoint("getlistUpgradeSkins"))
+        self._write_cache(key, data)
+        return data
+
+    def get_upgrade_skins(self, hero_name: str, refresh: bool = False) -> list[SkinItem]:
+        ttl = float(self.cfg.get("cache", {}).get("skins_ttl_hours", 1))
+        key = f"upgrade_{hero_name}"
+        if not refresh:
+            c = self._read_cache(key, ttl)
+            if c is not None:
+                return [SkinItem.from_upgrade_entry(x, hero_name) for x in c]
+        url = self.endpoint("getUpgradeSkins")
+        raw = self._post(url, {"category": hero_name})
+        if isinstance(raw, dict):
+            raw = raw.get("data", raw.get("skins", [raw]))
+        if not isinstance(raw, list):
+            raise ApiError("Format getUpgradeSkins tidak valid")
+        self._write_cache(key, raw)
+        return [SkinItem.from_upgrade_entry(x, hero_name) for x in raw if x.get("url") or x.get("downloadLink")]
+
+    def get_heroes_flat(self, refresh: bool = False) -> list[SkinItem]:
+        ttl = float(self.cfg.get("cache", {}).get("heroes_ttl_hours", 6))
+        key = "heroes_flat"
+        if not refresh:
+            c = self._read_cache(key, ttl)
+            if c is not None:
+                return [SkinItem.from_hero_entry(x) for x in c]
+        url = self.endpoint("getHeroes")
+        raw = self._get(url)
+        flat: list[dict] = []
+        if isinstance(raw, dict):
+            for _hero_key, entries in raw.items():
+                if isinstance(entries, list):
+                    flat.extend(entries)
+        elif isinstance(raw, list):
+            flat = raw
+        else:
+            raise ApiError("Format getHeroes tidak valid")
+        self._write_cache(key, flat)
+        return [SkinItem.from_hero_entry(x) for x in flat if x.get("downloadLink")]
+
+    def get_custom_skins(self, refresh: bool = False) -> list[SkinItem]:
+        ttl = float(self.cfg.get("cache", {}).get("skins_ttl_hours", 1))
+        key = "custom_skins"
+        if not refresh:
+            c = self._read_cache(key, ttl)
+            if c is not None:
+                return [SkinItem.from_custom_entry(x) for x in c]
+        url = self.endpoint("getCustomSkins")
+        raw = self._get(url)
+        if not isinstance(raw, list):
+            raise ApiError("Format getCustomSkins tidak valid")
+        self._write_cache(key, raw)
+        return [SkinItem.from_custom_entry(x) for x in raw if x.get("url") or x.get("downloadLink")]
+
+    def get_categories(self) -> list[dict[str, Any]]:
+        """Home menu categories from getCategory1 + getCategory2."""
+        items: list[dict] = []
+        for ep in ("getCategory1", "getCategory2"):
+            try:
+                data = self._get(self.endpoint(ep))
+                if isinstance(data, list):
+                    items.extend(data)
+            except ApiError as e:
+                LOG.warning("%s", e)
+        return items
+
+    def heroes_by_name_from_upgrade_menu(self) -> list[str]:
+        menu = self.get_upgrade_menu()
+        names: list[str] = []
+        for item in menu:
+            n = item.get("heroName") or item.get("name") or ""
+            if n:
+                names.append(str(n))
+        return sorted(set(names))
