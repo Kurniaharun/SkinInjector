@@ -49,30 +49,42 @@ class RichInjectReporter:
         if self.skin.source == "restore":
             self.console.print(
                 Panel(
-                    f"[bold]{self.skin.hero_name}[/]\n[dim]Mengembalikan file skin asli dari backup[/]",
-                    title="[bold yellow]RESTORE DEFAULT[/]",
+                    f"[bold yellow]{self.skin.hero_name}[/]\n"
+                    "[dim]Mengembalikan file skin asli dari backup lokal[/]",
+                    title="[bold] ↺  RESTORE DEFAULT [/]",
                     border_style="yellow",
+                    subtitle="[dim]rollback[/]",
                 )
             )
         else:
+            src_icon = {
+                "recall": "*",
+                "emote": "@",
+                "trail": "=",
+                "respawn": "R",
+                "painted": "+",
+                "upgrade": "^",
+                "backup": "O",
+            }.get(self.skin.source, "!")
             self.console.print(
                 Panel(
                     Text.from_markup(
-                        f"[bold]{self.skin.label()}[/]\n"
-                        f"[dim]Sumber:[/] {self.skin.source}\n"
-                        f"[dim]URL:[/] {self.skin.download_url or '-'}"
+                        f"[bold white]{self.skin.label()}[/]\n"
+                        f"[dim]type[/]  [cyan]{self.skin.source}[/]\n"
+                        f"[dim]url[/]   [dim]{self.skin.download_url or '-'}[/]"
                     ),
-                    title="[bold cyan]INJECT SKIN[/]",
-                    border_style="cyan",
+                    title=f"[bold cyan] {src_icon}  INJECT SKIN [/]",
+                    border_style="bright_cyan",
+                    subtitle="[dim]imb.expressme.in[/]",
                 )
             )
         self._progress = Progress(
-            SpinnerColumn("dots", style="cyan"),
+            SpinnerColumn("dots12", style="bright_cyan"),
             TextColumn("[bold]{task.description}"),
             BarColumn(
-                bar_width=36,
-                complete_style="green",
-                finished_style="bright_green",
+                bar_width=40,
+                complete_style="bright_green",
+                finished_style="green",
                 pulse_style="cyan",
             ),
             TaskProgressColumn(),
@@ -174,7 +186,7 @@ class RichInjectReporter:
                 description="[bold green]Selesai![/]",
                 detail=message,
             )
-            self.console.print(f"\n[bold green]OK[/] {message}")
+            self.console.print(f"\n[bold bright_green][OK][/] {message}")
         else:
             self._progress.update(
                 self._main_id,
@@ -182,4 +194,4 @@ class RichInjectReporter:
                 description="[bold red]Gagal[/]",
                 detail=message,
             )
-            self.console.print(f"\n[bold red]GAGAL[/] {message}")
+            self.console.print(f"\n[bold bright_red][FAIL][/] {message}")

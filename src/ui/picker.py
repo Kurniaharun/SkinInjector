@@ -5,7 +5,10 @@ from __future__ import annotations
 from typing import Optional
 
 from rich.console import Console
+from rich.panel import Panel
 from rich.text import Text
+
+from .theme import PROMPT, PROMPT_SYMBOL
 
 PAGE_SIZE = 20
 
@@ -46,21 +49,26 @@ def pick_from_list(
         page_items = filtered[start : start + page_size]
 
         console.print()
-        console.print(f"[bold]{title}[/]")
         console.print(
-            f"[dim]Halaman {page + 1}/{total_pages} | "
-            f"{len(filtered)} item"
-            + (f" | filter: [cyan]{filter_q}[/]" if filter_q else "")
-            + "[/]"
+            Panel(
+                f"[dim]Hal {page + 1}/{total_pages}[/] · [white]{len(filtered)}[/] item"
+                + (f" · filter [cyan]{filter_q}[/]" if filter_q else ""),
+                title=f"[bold]{title}[/]",
+                border_style="bright_black",
+                padding=(0, 1),
+            )
         )
-        console.print("[dim]Nomor = pilih | [S] cari | [N] next | [P] prev | [0] kembali[/]\n")
+        console.print(
+            "[dim][S][/] cari  [dim][N][/] next  [dim][P][/] prev  [dim][0][/] kembali\n"
+        )
 
         for i, label in enumerate(page_items, start + 1):
-            line = Text(f"  {i:>2}. ", style="cyan") + Text(label)
+            num = Text(f" {i:>2} ", style="bold white on dark_blue")
+            line = num + Text(" ") + Text(label)
             console.print(line, soft_wrap=True, overflow="fold")
 
         try:
-            raw = input("\n>>> ").strip()
+            raw = console.input(f"\n[{PROMPT}]{PROMPT_SYMBOL}[/] ").strip()
         except (EOFError, KeyboardInterrupt):
             return None
 
@@ -81,7 +89,7 @@ def pick_from_list(
             continue
         if low == "s":
             try:
-                filter_q = input("Cari nama: ").strip()
+                filter_q = console.input("[cyan]Cari:[/] ").strip()
             except (EOFError, KeyboardInterrupt):
                 return None
             page = 0

@@ -14,10 +14,17 @@ from rich.table import Table
 from ..app import App
 from ..errors import InjectorError
 from ..models import SkinItem
+from .branding import (
+    print_goodbye,
+    print_splash,
+    render_menu_table,
+    render_status_bar,
+)
 from .console import make_console
 from .picker import pick_from_list, pick_skin_labels
 from .progress_ui import RichInjectReporter
 from .screen import busy, clear_screen, run_busy
+from .theme import PROMPT, PROMPT_SYMBOL
 
 console = make_console()
 LOG = logging.getLogger(__name__)
@@ -25,7 +32,7 @@ LOG = logging.getLogger(__name__)
 
 def _pause() -> None:
     try:
-        input("\n[dim]Enter = kembali ke menu[/]")
+        console.input(f"\n[{PROMPT}]{PROMPT_SYMBOL}[/] [dim]Enter = kembali[/] ")
     except (EOFError, KeyboardInterrupt):
         pass
 
@@ -50,7 +57,7 @@ def _inject_flow(app: App, skin: SkinItem) -> None:
         console.print(f"[red]Gagal: {e}[/]")
 
 
-def _render_header(app: App) -> None:
+def _render_header(app: App, *, show_banner: bool = False) -> None:
     pf = app.preflight
     backend = pf.backend_name if pf else "?"
     package = pf.package if pf else "N/A"
@@ -59,32 +66,21 @@ def _render_header(app: App) -> None:
     except Exception:
         n_heroes = "?"
     index_n = app.search.count if app.search._loaded else "—"
-    console.print(
-        Panel(
-            f"[bold cyan]MLBB Skin Injector[/] v1.4\n"
-            f"Backend: [green]{backend}[/] | MLBB: [yellow]{package}[/]\n"
-            f"Hero: [white]{n_heroes}[/] | Index search: [dim]{index_n}[/]",
-            title="SkinInjector",
-            border_style="cyan",
-        )
+
+    if show_banner:
+        print_splash(console)
+    render_status_bar(
+        console,
+        backend=backend,
+        package=package or "N/A",
+        n_heroes=n_heroes,
+        index_n=index_n,
     )
+    console.print()
 
 
 def _render_menu() -> None:
-    console.print(
-        "[bold]Menu[/]\n"
-        "  [1] Browse Hero        [cyan]~100 hero, paginated + [S] cari[/]\n"
-        "  [2] Search Skin        [cyan]ketik nama, langsung cari[/]\n"
-        "  [3] Upgrade Skins      [cyan]324 skin upgrade, paginated[/]\n"
-        "  [4] Custom Skins\n"
-        "  [5] Restore Default      [cyan]dari backup lokal[/]\n"
-        "  [6] Status & Backup\n"
-        "  [7] Refresh index        [dim](opsional)[/]\n"
-        "  [8] Settings\n"
-        "  [9] Effects & Recall     [cyan]recall, emote, trail, respawn, painted[/]\n"
-        "  [10] Backup Official API [cyan]inject BACKUP.zip dari server[/]\n"
-        "  [0] Keluar"
-    )
+    render_menu_table(console)
 
 
 def _pick_skin(skins: list[SkinItem], title: str) -> Optional[SkinItem]:
@@ -97,7 +93,7 @@ def _pick_skin(skins: list[SkinItem], title: str) -> Optional[SkinItem]:
 
 
 def menu_search(app: App) -> None:
-    console.print("\n[bold]Search Skin[/]")
+    console.print(Panel("[bold]Search Skin[/]", border_style="magenta", padding=(0, 2)))
     console.print("[dim]Contoh: layla, gusion, dyrroth venom[/]")
     try:
         query = input("\nKetik nama: ").strip()
@@ -448,16 +444,18 @@ def run_interactive(app: App) -> None:
     logging.getLogger().setLevel(logging.WARNING)
 
     clear_screen()
-    with busy(console, "Inisialisasi..."):
+    with busy(console, "Menyiapkan SkinInjector..."):
         pf = app.init()
         app.search.load(allow_build=False)
         try:
-            run_busy(console, "Memuat hero...", app.api.list_hero_names)
+            run_busy(console, "Sinkron API...", app.api.list_hero_names)
         except Exception:
             pass
 
+    first_draw = True
+
     if not pf.ok and sys.platform != "win32":
-        console.print("[yellow]Beberapa cek gagal — inject mungkin terbatas.[/]")
+        console.print("[yellow]! Beberapa cek gagal — inject mungkin terbatas.[/]\n")
 
     actions: dict[str, Callable[[App], None]] = {
         "1": menu_browse_heroes,
@@ -474,17 +472,18 @@ def run_interactive(app: App) -> None:
 
     while True:
         clear_screen()
-        _render_header(app)
+        _render_header(app, show_banner=first_draw)
+        first_draw = False
         _render_menu()
 
         try:
-            choice = input("\nPilih: ").strip()
+            choice = console.input(f"\n[{PROMPT}]{PROMPT_SYMBOL}[/] Pilih menu: ").strip()
         except (EOFError, KeyboardInterrupt):
             break
 
         if choice == "0":
             clear_screen()
-            console.print("[dim]Sampai jumpa.[/]")
+            print_goodbye(console)
             break
 
         fn = actions.get(choice)
