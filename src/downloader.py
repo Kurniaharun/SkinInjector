@@ -69,12 +69,13 @@ class Downloader:
     )
     def _fetch_http(self, url: str, dest: Path, reporter: ProgressReporter) -> None:
         LOG.info("HTTP download %s", url)
-        reporter.on_step("Download...", 8, "http")
+        reporter.on_step("Menghubungkan server...", 3, "http")
         total = self._head_size(url)
         with self.session.get(url, stream=True, timeout=self.timeout) as r:
             r.raise_for_status()
             if not total:
                 total = int(r.headers.get("content-length", 0))
+            reporter.on_download(0, total, 0)
             downloaded = 0
             dest.parent.mkdir(parents=True, exist_ok=True)
             t0 = time.time()
@@ -86,7 +87,7 @@ class Downloader:
                     f.write(chunk)
                     downloaded += len(chunk)
                     now = time.time()
-                    if now - last_t >= 0.15 or (total and downloaded >= total):
+                    if now - last_t >= 0.12 or (total and downloaded >= total):
                         speed = downloaded / max(now - t0, 0.001)
                         reporter.on_download(downloaded, total, speed)
                         last_t = now

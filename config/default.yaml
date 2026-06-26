@@ -21,7 +21,7 @@ packages:
 
 inject:
   temp_zip_name: "IMB.zip"
-  backup_before_inject: true
+  backup_before_inject: false
   auto_rollback_on_fail: true
 
 download:

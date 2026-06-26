@@ -63,7 +63,7 @@ class Injector:
             reporter=rep,
         )
 
-        rep.on_step("Memvalidasi ZIP...", 56, str(zip_path.name))
+        rep.on_step("Memvalidasi ZIP...", 58, str(zip_path.name))
         try:
             members = validate_skin_zip(
                 zip_path,
@@ -75,7 +75,7 @@ class Injector:
 
         rep.on_step(
             f"ZIP valid — {len(members)} file",
-            62,
+            65,
             f"{zip_path.stat().st_size // 1024} KB",
         )
 
@@ -93,37 +93,26 @@ class Injector:
 
         hero_id = skin.id or skin.hero_name.replace(" ", "_")
 
-        if self.cfg.get("inject", {}).get("backup_before_inject", True):
-            rep.on_step("Backup skin default...", 65, hero_id)
-            self.backup.ensure_backup(
-                package,
-                hero_id,
-                skin.hero_name,
-                members,
-                assets_path,
-                reporter=rep,
-            )
-            rep.on_step("Backup selesai", 80, "")
-
         rep.on_step(
-            "Inject ke folder MLBB...",
-            82,
+            "Apply ke folder MLBB...",
+            72,
             assets_path[-50:],
         )
         ok = self.backend.unzip_replace(str(zip_path), assets_path)
         if not ok:
-            rep.on_step("Inject gagal — rollback...", 88, "")
+            rep.on_step("Inject gagal...", 88, "")
             if self.cfg.get("inject", {}).get("auto_rollback_on_fail", True):
-                try:
-                    self.backup.restore(package, hero_id, assets_path)
-                    rep.on_step("Rollback selesai", 92, "")
-                except Exception as e:
-                    LOG.error("Rollback gagal: %s", e)
-            msg = "Inject gagal (unzip). Rollback dicoba."
+                if self.cfg.get("inject", {}).get("backup_before_inject", False):
+                    try:
+                        self.backup.restore(package, hero_id, assets_path)
+                        rep.on_step("Rollback selesai", 92, "")
+                    except Exception as e:
+                        LOG.error("Rollback gagal: %s", e)
+            msg = "Inject gagal (unzip)."
             rep.finish(False, msg)
             raise InjectFailedError(msg)
 
-        rep.on_step("Menyimpan log inject...", 94, "")
+        rep.on_step("Menyimpan log inject...", 90, "")
         self.backup.record_inject(
             package=package,
             hero_id=hero_id,

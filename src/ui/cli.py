@@ -407,8 +407,7 @@ def menu_restore(app: App) -> None:
     backups = app.list_backups()
     if not backups:
         console.print("[yellow]Belum ada backup lokal.[/]")
-        console.print("[dim]Backup lokal dibuat otomatis saat inject pertama.[/]")
-        console.print("[dim]Atau pakai menu [12] Backup Official API.[/]")
+        console.print("[dim]Pakai menu [12] Backup Official API untuk restore default.[/]")
         _pause()
         return
     labels = [

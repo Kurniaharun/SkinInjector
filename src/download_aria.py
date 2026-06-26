@@ -55,7 +55,7 @@ def download_with_aria2(
         url,
     ]
 
-    reporter.on_step("Download aria2...", 8, f"x{splits}")
+    reporter.on_step("Menghubungkan server...", 3, f"x{splits}")
     LOG.info("aria2: %s", " ".join(cmd[:8]))
 
     proc = subprocess.Popen(
@@ -70,13 +70,30 @@ def download_with_aria2(
     downloaded = 0
 
     while proc.poll() is None:
-        if dest.exists():
-            downloaded = dest.stat().st_size
-            now = time.time()
-            if now - last_t >= 0.2:
-                elapsed = max(now - t0, 0.001)
-                reporter.on_download(downloaded, total_hint, downloaded / elapsed)
-                last_t = now
+        now = time.time()
+        if now - last_t >= 0.2:
+            elapsed = now - t0
+            if dest.exists():
+                downloaded = dest.stat().st_size
+                if downloaded > 0:
+                    reporter.on_download(
+                        downloaded,
+                        total_hint,
+                        downloaded / max(elapsed, 0.001),
+                    )
+                else:
+                    reporter.on_step(
+                        f"Menyiapkan download... {elapsed:.0f}s",
+                        min(18, 6 + int(elapsed) % 12),
+                        f"x{splits}",
+                    )
+            else:
+                reporter.on_step(
+                    f"Menghubungkan... {elapsed:.0f}s",
+                    min(18, 6 + int(elapsed) % 12),
+                    f"aria2 x{splits}",
+                )
+            last_t = now
         time.sleep(0.1)
 
     err = (proc.stderr.read() or "").strip() if proc.stderr else ""

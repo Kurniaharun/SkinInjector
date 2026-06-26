@@ -91,8 +91,10 @@ class RichInjectReporter:
             return
         self._progress.update(self._dl_id, visible=True)
         if total > 0:
-            ratio = downloaded / total
+            ratio = min(1.0, downloaded / total)
             main_pct = self._dl_base_pct + int(ratio * self._dl_span)
+            if downloaded == 0:
+                main_pct = max(main_pct, 8)
             self._progress.update(
                 self._main_id,
                 completed=main_pct,
@@ -104,23 +106,30 @@ class RichInjectReporter:
                 completed=int(ratio * 100),
                 total=100,
                 description=f"[green]Download {_fmt_bytes(downloaded)}/{_fmt_bytes(total)}[/]",
-                detail=f"{speed_bps / (1024*1024):.1f} MB/s" if speed_bps > 0 else "",
+                detail=f"{speed_bps / (1024*1024):.1f} MB/s" if speed_bps > 0 else "menghubungkan",
             )
         else:
             now = time.time()
-            if now - self._last_dl_log > 0.3:
+            if now - self._last_dl_log > 0.2:
                 self._last_dl_log = now
+                pulse = 10 + int(now * 3) % 20
+                if downloaded > 0:
+                    pulse = min(52, 25 + int(downloaded / 65536) % 25)
                 self._progress.update(
                     self._main_id,
-                    completed=30,
+                    completed=pulse,
                     description="[cyan]Downloading...[/]",
-                    detail=_fmt_bytes(downloaded),
+                    detail=_fmt_bytes(downloaded) if downloaded else "menunggu data",
                 )
                 self._progress.update(
                     self._dl_id,
                     completed=None,
                     total=None,
-                    description=f"[green]Downloaded {_fmt_bytes(downloaded)}[/]",
+                    description=(
+                        f"[green]Downloaded {_fmt_bytes(downloaded)}[/]"
+                        if downloaded
+                        else "[green]Menunggu server...[/]"
+                    ),
                 )
 
     def on_backup_file(self, current: int, total: int, filename: str) -> None:
