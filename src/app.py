@@ -32,9 +32,16 @@ class App:
         self.injector: Optional[Injector] = None
         self.package: Optional[str] = None
         self.assets_path: Optional[str] = None
+        self.preflight: Optional[PreflightResult] = None
+        self._logging_ready = False
 
-    def init(self) -> PreflightResult:
-        setup_logging(LOG_DIR)
+    def init(self, force: bool = False) -> PreflightResult:
+        if self.preflight and not force:
+            return self.preflight
+
+        if not self._logging_ready:
+            setup_logging(LOG_DIR, quiet_console=True)
+            self._logging_ready = True
         messages: list[str] = []
         ok = True
 
@@ -89,7 +96,7 @@ class App:
         if self.backend:
             self.injector = Injector(self.cfg, self.backend, Downloader(self.cfg))
 
-        return PreflightResult(
+        self.preflight = PreflightResult(
             ok=ok,
             mode=self.mode_override or self.cfg.get("access", {}).get("mode", "auto"),
             backend_name=self.backend.name if self.backend else "none",
@@ -97,6 +104,7 @@ class App:
             assets_path=self.assets_path,
             messages=messages,
         )
+        return self.preflight
 
     def inject_skin(
         self,
@@ -134,7 +142,10 @@ class App:
             return []
         return BackupManager(self.backend).list_backups(self.package)
 
-    def refresh_all(self) -> str:
+    def refresh_all(self, full: bool = True) -> str:
         self.api.load_endpoints(refresh=True)
-        n = self.search.build(refresh=True)
-        return f"Cache & index di-refresh ({n} skin)"
+        if full:
+            n = self.search.build_full(refresh=True)
+        else:
+            n = self.search.build_light(refresh=True)
+        return f"Index di-refresh ({n} skin)"

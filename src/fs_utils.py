@@ -19,16 +19,17 @@ LOG = logging.getLogger(__name__)
 DANGEROUS_ZIP = re.compile(r"(^|/)\.\.(/|$)")
 
 
-def setup_logging(log_dir: Path) -> None:
+def setup_logging(log_dir: Path, quiet_console: bool = False) -> None:
     log_dir.mkdir(parents=True, exist_ok=True)
     log_file = log_dir / "injector.log"
+    handlers: list[logging.Handler] = [logging.FileHandler(log_file, encoding="utf-8")]
+    if not quiet_console:
+        handlers.append(logging.StreamHandler())
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-        handlers=[
-            logging.FileHandler(log_file, encoding="utf-8"),
-            logging.StreamHandler(),
-        ],
+        handlers=handlers,
+        force=True,
     )
 
 

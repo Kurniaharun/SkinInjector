@@ -168,11 +168,61 @@ class ApiClient:
                 LOG.warning("%s", e)
         return items
 
-    def heroes_by_name_from_upgrade_menu(self) -> list[str]:
+    def get_hero_groups(self, refresh: bool = False) -> dict[str, list[dict[str, Any]]]:
+        """getHeroes2 — dict[hero_name, list[skin entries]]."""
+        ttl = float(self.cfg.get("cache", {}).get("heroes_ttl_hours", 6))
+        key = "heroes_groups"
+        if not refresh:
+            c = self._read_cache(key, ttl)
+            if isinstance(c, dict):
+                return c
+        url = self.endpoint("getHeroes")
+        raw = self._get(url)
+        if not isinstance(raw, dict):
+            raise ApiError("Format getHeroes tidak valid (harus dict per hero)")
+        self._write_cache(key, raw)
+        return raw
+
+    def list_hero_names(self, refresh: bool = False) -> list[str]:
+        groups = self.get_hero_groups(refresh=refresh)
+        return sorted(groups.keys(), key=str.lower)
+
+    def get_skins_for_hero(self, hero_name: str, refresh: bool = False) -> list[SkinItem]:
+        groups = self.get_hero_groups(refresh=refresh)
+        entries = groups.get(hero_name, [])
+        if not entries:
+            for key, val in groups.items():
+                if key.lower() == hero_name.lower():
+                    entries = val
+                    break
+        skins: list[SkinItem] = []
+        for x in entries:
+            item = SkinItem.from_hero_entry(x)
+            item.hero_name = hero_name
+            if item.download_url:
+                skins.append(item)
+        return skins
+
+    def search_hero_names(self, query: str) -> list[str]:
+        q = query.lower().strip()
+        if not q:
+            return self.list_hero_names()
+        return [n for n in self.list_hero_names() if q in n.lower()]
+
+    def search_upgrade_entries(self, query: str) -> list[dict[str, Any]]:
+        q = query.lower().strip()
         menu = self.get_upgrade_menu()
-        names: list[str] = []
-        for item in menu:
-            n = item.get("heroName") or item.get("name") or ""
-            if n:
-                names.append(str(n))
-        return sorted(set(names))
+        if not q:
+            return menu
+        return [
+            x
+            for x in menu
+            if q in str(x.get("heroName", x.get("name", ""))).lower()
+        ]
+
+    def get_upgrade_skins_for_entry(self, entry: dict[str, Any], refresh: bool = False) -> list[SkinItem]:
+        """POST pakai heroName persis dari item list upgrade."""
+        category = str(entry.get("heroName") or entry.get("name") or "")
+        if not category:
+            return []
+        return self.get_upgrade_skins(category, refresh=refresh)

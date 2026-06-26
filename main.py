@@ -61,7 +61,7 @@ def cmd_status(app: App) -> int:
 
 def cmd_search(app: App, query: str) -> int:
     app.init()
-    app.search.load()
+    app.search.ensure_for_search()
     for s in app.search.search(query):
         print(f"{s.hero_name} | {s.skin_name} | [{s.source}] | {s.download_url}")
     return 0
@@ -69,7 +69,7 @@ def cmd_search(app: App, query: str) -> int:
 
 def cmd_inject(app: App, hero: str, skin: str, dry_run: bool) -> int:
     app.init()
-    app.search.load()
+    app.search.ensure_for_search()
     results = app.search.search(f"{hero} {skin}")
     if not results:
         results = [x for x in app.search.by_hero(hero) if skin.lower() in x.skin_name.lower()]
