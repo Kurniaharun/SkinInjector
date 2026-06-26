@@ -15,6 +15,15 @@ from .errors import ApiError
 from .models import SkinItem
 from .name_resolver import build_name_corpus, resolve_category_label
 
+# Kategori efek dari API (POST getEmotes + category)
+EFFECT_CATEGORIES: list[tuple[str, str]] = [
+    ("Recall Animations", "recall"),
+    ("Emotes", "emote"),
+    ("TRAIL ANIMATION", "trail"),
+    ("RESPAWN ANIMATION", "respawn"),
+    ("PAINTED SKIN", "painted"),
+]
+
 LOG = logging.getLogger(__name__)
 
 
@@ -187,6 +196,72 @@ class ApiClient:
             for x in raw
             if x.get("url") or x.get("downloadLink")
         ]
+
+    def get_effects(self, category: str, refresh: bool = False) -> list[SkinItem]:
+        """Recall, emote, trail, respawn, painted — POST getEmotes."""
+        ttl = float(self.cfg.get("cache", {}).get("skins_ttl_hours", 1))
+        safe_cat = category.replace("/", "_").replace(" ", "_")
+        key = f"effects_{safe_cat}"
+        corpus = self.name_corpus(refresh=refresh)
+        if not refresh:
+            c = self._read_cache(key, ttl)
+            if c is not None:
+                return [SkinItem.from_effect_entry(x, corpus=corpus) for x in c]
+        url = self.endpoint("getEmotes")
+        raw = self._post(url, {"category": category})
+        if isinstance(raw, dict):
+            raw = raw.get("data", raw.get("items", []))
+        if not isinstance(raw, list):
+            raise ApiError(f"Format getEmotes tidak valid untuk {category}")
+        self._write_cache(key, raw)
+        return [
+            SkinItem.from_effect_entry(x, corpus=corpus)
+            for x in raw
+            if x.get("downloadLink") or x.get("url")
+        ]
+
+    def list_effect_categories(self) -> list[tuple[str, str]]:
+        return list(EFFECT_CATEGORIES)
+
+    def search_effects(self, query: str, limit_per_cat: int = 12) -> list[SkinItem]:
+        q = query.lower().strip()
+        if not q:
+            return []
+        results: list[SkinItem] = []
+        for cat_name, _src in EFFECT_CATEGORIES:
+            try:
+                for item in self.get_effects(cat_name):
+                    if q in item.skin_name.lower() or q in item.category.lower():
+                        results.append(item)
+                        if len([r for r in results if r.category == cat_name]) >= limit_per_cat:
+                            break
+            except ApiError as e:
+                LOG.warning("search effects %s: %s", cat_name, e)
+        return results
+
+    def list_backup_skins(self, hero_name: str | None = None, refresh: bool = False) -> list[SkinItem]:
+        """Skin BACKUP official dari API (untuk restore skin default via inject)."""
+        corpus = self.name_corpus(refresh=refresh)
+        groups = self.get_hero_groups(refresh=refresh)
+        out: list[SkinItem] = []
+        heroes = [hero_name] if hero_name else sorted(groups.keys(), key=str.lower)
+        for hero in heroes:
+            entries = groups.get(hero, [])
+            if not entries and hero_name:
+                for key, val in groups.items():
+                    if key.lower() == hero_name.lower():
+                        entries = val
+                        hero = key
+                        break
+            for x in entries:
+                raw = str(x.get("heroname", x.get("name", ""))).lower()
+                dl = str(x.get("downloadLink", "")).lower()
+                if "backup" in raw or "backup" in dl:
+                    item = SkinItem.from_hero_entry(x, hero=hero, corpus=corpus)
+                    item.source = "backup"
+                    if item.download_url:
+                        out.append(item)
+        return out
 
     def get_categories(self) -> list[dict[str, Any]]:
         """Home menu categories from getCategory1 + getCategory2."""

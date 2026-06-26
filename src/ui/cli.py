@@ -41,7 +41,7 @@ def _confirm(msg: str, prompt: str = "Lanjut inject? (y/N): ") -> bool:
 
 
 def _inject_flow(app: App, skin: SkinItem) -> None:
-    if not _confirm(f"Inject [bold cyan]{skin.skin_name}[/] — [dim]{skin.hero_name}[/]"):
+    if not _confirm(f"Inject [bold cyan]{skin.label()}[/]"):
         return
     try:
         with RichInjectReporter(console, skin) as ui:
@@ -61,7 +61,7 @@ def _render_header(app: App) -> None:
     index_n = app.search.count if app.search._loaded else "—"
     console.print(
         Panel(
-            f"[bold cyan]MLBB Skin Injector[/] v1.3\n"
+            f"[bold cyan]MLBB Skin Injector[/] v1.4\n"
             f"Backend: [green]{backend}[/] | MLBB: [yellow]{package}[/]\n"
             f"Hero: [white]{n_heroes}[/] | Index search: [dim]{index_n}[/]",
             title="SkinInjector",
@@ -77,10 +77,12 @@ def _render_menu() -> None:
         "  [2] Search Skin        [cyan]ketik nama, langsung cari[/]\n"
         "  [3] Upgrade Skins      [cyan]324 skin upgrade, paginated[/]\n"
         "  [4] Custom Skins\n"
-        "  [5] Restore Default\n"
+        "  [5] Restore Default      [cyan]dari backup lokal[/]\n"
         "  [6] Status & Backup\n"
-        "  [7] Refresh index      [dim](opsional, untuk search offline)[/]\n"
+        "  [7] Refresh index        [dim](opsional)[/]\n"
         "  [8] Settings\n"
+        "  [9] Effects & Recall     [cyan]recall, emote, trail, respawn, painted[/]\n"
+        "  [10] Backup Official API [cyan]inject BACKUP.zip dari server[/]\n"
         "  [0] Keluar"
     )
 
@@ -125,7 +127,13 @@ def menu_search(app: App) -> None:
     except Exception as e:
         LOG.warning("upgrade search: %s", e)
 
-    # 3) Fallback index lokal
+    # 3) Effects (recall, emote, dll)
+    try:
+        results.extend(app.api.search_effects(query))
+    except Exception as e:
+        LOG.warning("effect search: %s", e)
+
+    # 4) Fallback index lokal
     if len(results) < 3:
         run_busy(console, "Memuat index lokal...", app.search.ensure_for_search)
         results.extend(app.search.search(query))
@@ -230,6 +238,87 @@ def menu_upgrade(app: App) -> None:
     _pause()
 
 
+def menu_effects(app: App) -> None:
+    console.print("\n[bold]Effects & Recall[/]")
+    cats = app.api.list_effect_categories()
+    labels = [f"{name} [{src}]" for name, src in cats]
+    idx = pick_from_list(console, labels, "Pilih Kategori Effect", page_size=10)
+    if idx is None:
+        return
+
+    cat_name, _src = cats[idx]
+    try:
+        items = run_busy(
+            console,
+            f"Memuat {cat_name}...",
+            lambda: app.api.get_effects(cat_name),
+        )
+    except Exception as e:
+        console.print(f"[red]Gagal: {e}[/]")
+        _pause()
+        return
+
+    if not items:
+        console.print(f"[yellow]Tidak ada data untuk {cat_name}.[/]")
+        _pause()
+        return
+
+    console.print(f"[green]{len(items)} item[/] — [S] cari | [N]/[P] halaman\n")
+    skin = _pick_skin(items, cat_name)
+    if skin:
+        _inject_flow(app, skin)
+    _pause()
+
+
+def menu_api_backup(app: App) -> None:
+    console.print("\n[bold]Backup Official (API)[/]")
+    console.print(
+        "[dim]Inject file BACKUP.zip dari server untuk kembalikan skin hero ke default.[/]\n"
+        "[dim]Alternatif: Browse Hero → pilih skin 'Backup ...'[/]\n"
+    )
+    try:
+        names = run_busy(console, "Memuat hero...", app.api.list_hero_names)
+    except Exception as e:
+        console.print(f"[red]{e}[/]")
+        _pause()
+        return
+
+    idx = pick_from_list(console, names, "Pilih Hero (Backup API)")
+    if idx is None:
+        return
+
+    hero = names[idx]
+    try:
+        backups = run_busy(
+            console,
+            f"Mencari backup {hero}...",
+            lambda: app.api.list_backup_skins(hero),
+        )
+    except Exception as e:
+        console.print(f"[red]{e}[/]")
+        _pause()
+        return
+
+    if not backups:
+        console.print(f"[yellow]Tidak ada entry BACKUP untuk {hero} di API.[/]")
+        _pause()
+        return
+
+    skin = _pick_skin(backups, f"Backup — {hero}")
+    if skin:
+        if _confirm(
+            f"[yellow]Inject backup official[/] [bold]{skin.label()}[/]\n"
+            "[dim]Ini akan timpa file skin hero di folder game.[/]",
+            "Lanjut? (y/N): ",
+        ):
+            try:
+                with RichInjectReporter(console, skin) as ui:
+                    app.inject_skin(skin, reporter=ui.reporter)
+            except InjectorError as e:
+                console.print(f"[red]Gagal: {e}[/]")
+    _pause()
+
+
 def menu_custom(app: App) -> None:
     try:
         skins = run_busy(console, "Memuat custom skins...", app.api.get_custom_skins)
@@ -246,7 +335,9 @@ def menu_custom(app: App) -> None:
 def menu_restore(app: App) -> None:
     backups = app.list_backups()
     if not backups:
-        console.print("[yellow]Belum ada backup. Dibuat otomatis saat inject pertama.[/]")
+        console.print("[yellow]Belum ada backup lokal.[/]")
+        console.print("[dim]Backup lokal dibuat otomatis saat inject pertama.[/]")
+        console.print("[dim]Atau pakai menu [10] Backup Official API.[/]")
         _pause()
         return
     labels = [
@@ -298,6 +389,8 @@ def menu_status(app: App) -> None:
     try:
         table.add_row("Hero tersedia", str(len(app.api.list_hero_names())))
         table.add_row("Upgrade skin", str(len(app.api.get_upgrade_menu())))
+        table.add_row("Recall", str(len(app.api.get_effects("Recall Animations"))))
+        table.add_row("Emotes", str(len(app.api.get_effects("Emotes"))))
     except Exception:
         pass
     table.add_row("Index search", str(app.search.count))
@@ -375,6 +468,8 @@ def run_interactive(app: App) -> None:
         "6": menu_status,
         "7": menu_refresh_full,
         "8": menu_settings,
+        "9": menu_effects,
+        "10": menu_api_backup,
     }
 
     while True:

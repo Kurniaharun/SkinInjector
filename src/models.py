@@ -81,6 +81,32 @@ class SkinItem:
         )
 
     @classmethod
+    def from_effect_entry(cls, data: dict[str, Any], corpus: set[str] | None = None) -> SkinItem:
+        img = str(data.get("img", ""))
+        dl = str(data.get("downloadLink", data.get("url", "")))
+        cat = str(data.get("category", ""))
+        raw_name = str(data.get("name", data.get("skinName", "")))
+        skin_name = resolve_name(raw_name, img=img, download=dl, corpus=corpus)
+        source_map = {
+            "Recall Animations": "recall",
+            "TRAIL ANIMATION": "trail",
+            "RESPAWN ANIMATION": "respawn",
+            "Emotes": "emote",
+            "PAINTED SKIN": "painted",
+        }
+        return cls(
+            id=str(data.get("id", "")),
+            hero_name=cat,
+            skin_name=skin_name,
+            image_url=img,
+            download_url=dl,
+            category=cat,
+            mini_patch=bool(int(data.get("mini_patch", 0) or 0)),
+            source=source_map.get(cat, "effect"),
+            api_category=cat,
+        )
+
+    @classmethod
     def from_custom_entry(cls, data: dict[str, Any], corpus: set[str] | None = None) -> SkinItem:
         img = str(data.get("img", ""))
         dl = str(data.get("url", data.get("downloadLink", "")))
