@@ -13,6 +13,7 @@ import requests
 from .config import CACHE_DIR
 from .errors import ApiError
 from .models import SkinItem
+from .name_resolver import build_name_corpus, resolve_category_label
 
 LOG = logging.getLogger(__name__)
 
@@ -27,6 +28,7 @@ class ApiClient:
         self.session = requests.Session()
         self.session.headers.update({"User-Agent": self.ua})
         self._endpoints: dict[str, str] = {}
+        self._name_corpus: set[str] | None = None
 
     def _cache_path(self, key: str) -> Path:
         safe = key.replace("/", "_").replace("?", "_")
@@ -88,6 +90,25 @@ class ApiClient:
         LOG.info("Loaded %d endpoints", len(self._endpoints))
         return self._endpoints
 
+    def name_corpus(self, refresh: bool = False) -> set[str]:
+        if self._name_corpus is not None and not refresh:
+            return self._name_corpus
+        entries: list[dict] = []
+        try:
+            for skins in self.get_hero_groups(refresh=refresh).values():
+                entries.extend(skins)
+        except ApiError as e:
+            LOG.warning("corpus heroes: %s", e)
+        try:
+            entries.extend(self.get_upgrade_menu(refresh=refresh))
+        except ApiError as e:
+            LOG.warning("corpus upgrade: %s", e)
+        self._name_corpus = build_name_corpus(entries)
+        return self._name_corpus
+
+    def upgrade_menu_label(self, entry: dict[str, Any]) -> str:
+        return resolve_category_label(entry, self.name_corpus())
+
     def endpoint(self, name: str) -> str:
         eps = self.load_endpoints()
         if name not in eps:
@@ -108,10 +129,11 @@ class ApiClient:
     def get_upgrade_skins(self, hero_name: str, refresh: bool = False) -> list[SkinItem]:
         ttl = float(self.cfg.get("cache", {}).get("skins_ttl_hours", 1))
         key = f"upgrade_{hero_name}"
+        corpus = self.name_corpus(refresh=refresh)
         if not refresh:
             c = self._read_cache(key, ttl)
             if c is not None:
-                return [SkinItem.from_upgrade_entry(x, hero_name) for x in c]
+                return [SkinItem.from_upgrade_entry(x, hero_name, corpus) for x in c]
         url = self.endpoint("getUpgradeSkins")
         raw = self._post(url, {"category": hero_name})
         if isinstance(raw, dict):
@@ -119,15 +141,20 @@ class ApiClient:
         if not isinstance(raw, list):
             raise ApiError("Format getUpgradeSkins tidak valid")
         self._write_cache(key, raw)
-        return [SkinItem.from_upgrade_entry(x, hero_name) for x in raw if x.get("url") or x.get("downloadLink")]
+        return [
+            SkinItem.from_upgrade_entry(x, hero_name, corpus)
+            for x in raw
+            if x.get("url") or x.get("downloadLink")
+        ]
 
     def get_heroes_flat(self, refresh: bool = False) -> list[SkinItem]:
         ttl = float(self.cfg.get("cache", {}).get("heroes_ttl_hours", 6))
         key = "heroes_flat"
+        corpus = self.name_corpus(refresh=refresh)
         if not refresh:
             c = self._read_cache(key, ttl)
             if c is not None:
-                return [SkinItem.from_hero_entry(x) for x in c]
+                return [SkinItem.from_hero_entry(x, corpus=corpus) for x in c]
         url = self.endpoint("getHeroes")
         raw = self._get(url)
         flat: list[dict] = []
@@ -140,21 +167,26 @@ class ApiClient:
         else:
             raise ApiError("Format getHeroes tidak valid")
         self._write_cache(key, flat)
-        return [SkinItem.from_hero_entry(x) for x in flat if x.get("downloadLink")]
+        return [SkinItem.from_hero_entry(x, corpus=corpus) for x in flat if x.get("downloadLink")]
 
     def get_custom_skins(self, refresh: bool = False) -> list[SkinItem]:
         ttl = float(self.cfg.get("cache", {}).get("skins_ttl_hours", 1))
         key = "custom_skins"
+        corpus = self.name_corpus(refresh=refresh)
         if not refresh:
             c = self._read_cache(key, ttl)
             if c is not None:
-                return [SkinItem.from_custom_entry(x) for x in c]
+                return [SkinItem.from_custom_entry(x, corpus) for x in c]
         url = self.endpoint("getCustomSkins")
         raw = self._get(url)
         if not isinstance(raw, list):
             raise ApiError("Format getCustomSkins tidak valid")
         self._write_cache(key, raw)
-        return [SkinItem.from_custom_entry(x) for x in raw if x.get("url") or x.get("downloadLink")]
+        return [
+            SkinItem.from_custom_entry(x, corpus)
+            for x in raw
+            if x.get("url") or x.get("downloadLink")
+        ]
 
     def get_categories(self) -> list[dict[str, Any]]:
         """Home menu categories from getCategory1 + getCategory2."""
@@ -196,9 +228,9 @@ class ApiClient:
                     entries = val
                     break
         skins: list[SkinItem] = []
+        corpus = self.name_corpus(refresh=refresh)
         for x in entries:
-            item = SkinItem.from_hero_entry(x)
-            item.hero_name = hero_name
+            item = SkinItem.from_hero_entry(x, hero=hero_name, corpus=corpus)
             if item.download_url:
                 skins.append(item)
         return skins
@@ -214,11 +246,13 @@ class ApiClient:
         menu = self.get_upgrade_menu()
         if not q:
             return menu
-        return [
-            x
-            for x in menu
-            if q in str(x.get("heroName", x.get("name", ""))).lower()
-        ]
+        out: list[dict[str, Any]] = []
+        for x in menu:
+            raw = str(x.get("heroName", x.get("name", "")))
+            label = self.upgrade_menu_label(x)
+            if q in raw.lower() or q in label.lower():
+                out.append(x)
+        return out
 
     def get_upgrade_skins_for_entry(self, entry: dict[str, Any], refresh: bool = False) -> list[SkinItem]:
         """POST pakai heroName persis dari item list upgrade."""

@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Optional
 
 from rich.console import Console
+from rich.text import Text
 
 PAGE_SIZE = 20
 
@@ -55,7 +56,8 @@ def pick_from_list(
         console.print("[dim]Nomor = pilih | [S] cari | [N] next | [P] prev | [0] kembali[/]\n")
 
         for i, label in enumerate(page_items, start + 1):
-            console.print(f"  [cyan]{i:>2}.[/] {label}")
+            line = Text(f"  {i:>2}. ", style="cyan") + Text(label)
+            console.print(line, soft_wrap=True, overflow="fold")
 
         try:
             raw = input("\n>>> ").strip()

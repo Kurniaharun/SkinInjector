@@ -14,11 +14,12 @@ from rich.table import Table
 from ..app import App
 from ..errors import InjectorError
 from ..models import SkinItem
+from .console import make_console
 from .picker import pick_from_list, pick_skin_labels
 from .progress_ui import RichInjectReporter
 from .screen import busy, clear_screen, run_busy
 
-console = Console()
+console = make_console()
 LOG = logging.getLogger(__name__)
 
 
@@ -60,7 +61,7 @@ def _render_header(app: App) -> None:
     index_n = app.search.count if app.search._loaded else "—"
     console.print(
         Panel(
-            f"[bold cyan]MLBB Skin Injector[/] v1.2\n"
+            f"[bold cyan]MLBB Skin Injector[/] v1.3\n"
             f"Backend: [green]{backend}[/] | MLBB: [yellow]{package}[/]\n"
             f"Hero: [white]{n_heroes}[/] | Index search: [dim]{index_n}[/]",
             title="SkinInjector",
@@ -88,7 +89,7 @@ def _pick_skin(skins: list[SkinItem], title: str) -> Optional[SkinItem]:
     if not skins:
         console.print("[yellow]Tidak ada skin untuk hero ini.[/]")
         return None
-    labels = [f"{s.skin_name}" for s in skins]
+    labels = [s.label() for s in skins]
     idx = pick_skin_labels(console, labels, title)
     return skins[idx] if idx is not None else None
 
@@ -143,7 +144,7 @@ def menu_search(app: App) -> None:
         _pause()
         return
 
-    labels = [f"{s.skin_name} — {s.hero_name} [{s.source}]" for s in unique]
+    labels = [f"{s.label()} [{s.source}]" for s in unique]
     idx = pick_from_list(console, labels, f"Hasil '{query}' ({len(unique)})", page_size=15)
     if idx is not None:
         _inject_flow(app, unique[idx])
@@ -197,7 +198,7 @@ def menu_upgrade(app: App) -> None:
         _pause()
         return
 
-    labels = [str(x.get("heroName", x.get("name", "?"))) for x in menu]
+    labels = [app.api.upgrade_menu_label(x) for x in menu]
     console.print(f"[green]{len(labels)} upgrade skin.[/] [S] cari | [N]/[P] halaman\n")
 
     idx = pick_from_list(console, labels, "Pilih Upgrade Skin")
@@ -206,10 +207,11 @@ def menu_upgrade(app: App) -> None:
 
     entry = menu[idx]
     cat = str(entry.get("heroName", ""))
+    cat_label = labels[idx]
     try:
         skins = run_busy(
             console,
-            f"Memuat {cat[:40]}...",
+            f"Memuat {cat_label}...",
             lambda: app.api.get_upgrade_skins_for_entry(entry),
         )
     except Exception as e:
@@ -218,11 +220,11 @@ def menu_upgrade(app: App) -> None:
         return
 
     if not skins:
-        console.print(f"[yellow]Tidak ada file skin untuk '{cat}'.[/]")
+        console.print(f"[yellow]Tidak ada file skin untuk '{cat_label}'.[/]")
         _pause()
         return
 
-    skin = _pick_skin(skins, f"Upgrade — {cat}")
+    skin = _pick_skin(skins, f"Upgrade — {cat_label}")
     if skin:
         _inject_flow(app, skin)
     _pause()

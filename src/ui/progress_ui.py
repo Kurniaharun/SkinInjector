@@ -55,15 +55,12 @@ class RichInjectReporter:
                 )
             )
         else:
-            url_line = self.skin.download_url or "-"
-            if len(url_line) > 80:
-                url_line = url_line[:80] + "..."
             self.console.print(
                 Panel(
                     Text.from_markup(
-                        f"[bold]{self.skin.hero_name} — {self.skin.skin_name}[/]\n"
+                        f"[bold]{self.skin.label()}[/]\n"
                         f"[dim]Sumber:[/] {self.skin.source}\n"
-                        f"[dim]URL:[/] {url_line}"
+                        f"[dim]URL:[/] {self.skin.download_url or '-'}"
                     ),
                     title="[bold cyan]INJECT SKIN[/]",
                     border_style="cyan",
@@ -109,7 +106,7 @@ class RichInjectReporter:
             self._main_id,
             completed=pct,
             description=step,
-            detail=detail[:60],
+            detail=detail,
         )
         if "download" not in step.lower() and self._dl_id is not None:
             self._progress.update(self._dl_id, visible=False)
@@ -157,7 +154,7 @@ class RichInjectReporter:
         base = 65
         span = 15
         pct = base + (int(current * span / total) if total else 0)
-        short = filename if len(filename) <= 40 else "..." + filename[-37:]
+        short = filename
         self._progress.update(
             self._main_id,
             completed=pct,
@@ -175,7 +172,7 @@ class RichInjectReporter:
                 self._main_id,
                 completed=100,
                 description="[bold green]Selesai![/]",
-                detail=message[:60],
+                detail=message,
             )
             self.console.print(f"\n[bold green]OK[/] {message}")
         else:
@@ -183,6 +180,6 @@ class RichInjectReporter:
                 self._main_id,
                 completed=100,
                 description="[bold red]Gagal[/]",
-                detail=message[:60],
+                detail=message,
             )
             self.console.print(f"\n[bold red]GAGAL[/] {message}")
