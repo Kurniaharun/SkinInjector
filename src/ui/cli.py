@@ -7,19 +7,13 @@ import sys
 from typing import Any, Callable, Optional
 
 from rich.console import Console
-from rich.panel import Panel
 from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn, TextColumn
 from rich.table import Table
 
 from ..app import App
 from ..errors import InjectorError
 from ..models import SkinItem
-from .branding import (
-    print_goodbye,
-    print_splash,
-    render_menu_table,
-    render_status_bar,
-)
+from .branding import print_banner, print_goodbye, print_status, render_menu
 from .console import make_console
 from .picker import pick_from_list, pick_skin_labels
 from .progress_ui import RichInjectReporter
@@ -59,28 +53,14 @@ def _inject_flow(app: App, skin: SkinItem) -> None:
 
 def _render_header(app: App, *, show_banner: bool = False) -> None:
     pf = app.preflight
-    backend = pf.backend_name if pf else "?"
-    package = pf.package if pf else "N/A"
-    try:
-        n_heroes = len(app.api.list_hero_names())
-    except Exception:
-        n_heroes = "?"
-    index_n = app.search.count if app.search._loaded else "—"
-
     if show_banner:
-        print_splash(console)
-    render_status_bar(
-        console,
-        backend=backend,
-        package=package or "N/A",
-        n_heroes=n_heroes,
-        index_n=index_n,
-    )
-    console.print()
+        print_banner(console)
+    if pf:
+        print_status(console, pf.backend_name, pf.package or "?")
 
 
 def _render_menu() -> None:
-    render_menu_table(console)
+    render_menu(console)
 
 
 def _pick_skin(skins: list[SkinItem], title: str) -> Optional[SkinItem]:
@@ -93,7 +73,7 @@ def _pick_skin(skins: list[SkinItem], title: str) -> Optional[SkinItem]:
 
 
 def menu_search(app: App) -> None:
-    console.print(Panel("[bold]Search Skin[/]", border_style="magenta", padding=(0, 2)))
+    console.print("\n[bold]Search[/]")
     console.print("[dim]Contoh: layla, gusion, dyrroth venom[/]")
     try:
         query = input("\nKetik nama: ").strip()
@@ -156,27 +136,25 @@ def menu_search(app: App) -> None:
 
 
 def menu_browse_heroes(app: App) -> None:
-    console.print("\n[bold]Browse Hero[/]")
     try:
-        names = run_busy(console, "Memuat daftar hero...", app.api.list_hero_names)
+        names = run_busy(console, "Loading...", app.api.list_hero_names)
     except Exception as e:
-        console.print(f"[red]Gagal: {e}[/]")
+        console.print(f"[red]{e}[/]")
         _pause()
         return
-
     if not names:
-        console.print("[red]Daftar hero kosong — cek koneksi internet.[/]")
+        console.print("[red]Kosong.[/]")
         _pause()
         return
 
-    console.print(f"[green]Loaded {len(names)} hero.[/] Tekan [S] untuk cari, [N]/[P] halaman.\n")
+    console.print(f"\n[bold]Browse Hero[/]  [dim]{len(names)}[/]")
     idx = pick_from_list(console, names, "Pilih Hero")
     if idx is None:
         return
 
     hero = names[idx]
     try:
-        skins = run_busy(console, f"Memuat skin {hero}...", lambda: app.api.get_skins_for_hero(hero))
+        skins = run_busy(console, "Loading...", lambda: app.api.get_skins_for_hero(hero))
     except Exception as e:
         console.print(f"[red]{e}[/]")
         _pause()
@@ -189,23 +167,21 @@ def menu_browse_heroes(app: App) -> None:
 
 
 def menu_upgrade(app: App) -> None:
-    console.print("\n[bold]Upgrade Skins[/]")
     try:
-        menu = run_busy(console, "Memuat daftar upgrade...", app.api.get_upgrade_menu)
+        menu = run_busy(console, "Loading...", app.api.get_upgrade_menu)
     except Exception as e:
-        console.print(f"[red]Gagal: {e}[/]")
+        console.print(f"[red]{e}[/]")
         _pause()
         return
-
     if not menu:
-        console.print("[yellow]Daftar upgrade kosong.[/]")
+        console.print("[yellow]Kosong.[/]")
         _pause()
         return
 
     labels = [app.api.upgrade_menu_label(x) for x in menu]
-    console.print(f"[green]{len(labels)} upgrade skin.[/] [S] cari | [N]/[P] halaman\n")
+    console.print(f"\n[bold]Upgrade[/]  [dim]{len(labels)}[/]")
 
-    idx = pick_from_list(console, labels, "Pilih Upgrade Skin")
+    idx = pick_from_list(console, labels, "Pilih Upgrade")
     if idx is None:
         return
 
@@ -213,11 +189,7 @@ def menu_upgrade(app: App) -> None:
     cat = str(entry.get("heroName", ""))
     cat_label = labels[idx]
     try:
-        skins = run_busy(
-            console,
-            f"Memuat {cat_label}...",
-            lambda: app.api.get_upgrade_skins_for_entry(entry),
-        )
+        skins = run_busy(console, "Loading...", lambda: app.api.get_upgrade_skins_for_entry(entry))
     except Exception as e:
         console.print(f"[red]{e}[/]")
         _pause()
@@ -235,31 +207,26 @@ def menu_upgrade(app: App) -> None:
 
 
 def menu_effects(app: App) -> None:
-    console.print("\n[bold]Effects & Recall[/]")
+    console.print("\n[bold]Effects[/]")
     cats = app.api.list_effect_categories()
-    labels = [f"{name} [{src}]" for name, src in cats]
-    idx = pick_from_list(console, labels, "Pilih Kategori Effect", page_size=10)
+    labels = [name for name, _src in cats]
+    idx = pick_from_list(console, labels, "Kategori", page_size=10)
     if idx is None:
         return
 
     cat_name, _src = cats[idx]
     try:
-        items = run_busy(
-            console,
-            f"Memuat {cat_name}...",
-            lambda: app.api.get_effects(cat_name),
-        )
+        items = run_busy(console, "Loading...", lambda: app.api.get_effects(cat_name))
     except Exception as e:
         console.print(f"[red]Gagal: {e}[/]")
         _pause()
         return
 
     if not items:
-        console.print(f"[yellow]Tidak ada data untuk {cat_name}.[/]")
+        console.print("[yellow]Kosong.[/]")
         _pause()
         return
 
-    console.print(f"[green]{len(items)} item[/] — [S] cari | [N]/[P] halaman\n")
     skin = _pick_skin(items, cat_name)
     if skin:
         _inject_flow(app, skin)
@@ -267,11 +234,7 @@ def menu_effects(app: App) -> None:
 
 
 def menu_api_backup(app: App) -> None:
-    console.print("\n[bold]Backup Official (API)[/]")
-    console.print(
-        "[dim]Inject file BACKUP.zip dari server untuk kembalikan skin hero ke default.[/]\n"
-        "[dim]Alternatif: Browse Hero → pilih skin 'Backup ...'[/]\n"
-    )
+    console.print("\n[bold]Backup API[/]")
     try:
         names = run_busy(console, "Memuat hero...", app.api.list_hero_names)
     except Exception as e:
@@ -444,11 +407,11 @@ def run_interactive(app: App) -> None:
     logging.getLogger().setLevel(logging.WARNING)
 
     clear_screen()
-    with busy(console, "Menyiapkan SkinInjector..."):
+    with busy(console, "Loading..."):
         pf = app.init()
         app.search.load(allow_build=False)
         try:
-            run_busy(console, "Sinkron API...", app.api.list_hero_names)
+            run_busy(console, "API...", app.api.list_hero_names)
         except Exception:
             pass
 
@@ -472,8 +435,13 @@ def run_interactive(app: App) -> None:
 
     while True:
         clear_screen()
-        _render_header(app, show_banner=first_draw)
-        first_draw = False
+        if first_draw:
+            _render_header(app, show_banner=True)
+            first_draw = False
+        else:
+            pf = app.preflight
+            if pf:
+                print_status(console, pf.backend_name, pf.package or "?")
         _render_menu()
 
         try:

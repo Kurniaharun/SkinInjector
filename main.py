@@ -17,7 +17,7 @@ if str(ROOT) not in sys.path:
 from src.app import App
 from src.errors import InjectorError
 from src.progress import ConsoleReporter
-from src.ui.branding import print_splash, VERSION
+from src.ui.branding import print_banner, VERSION
 from src.ui.cli import run_interactive
 from src.ui.console import make_console
 
@@ -56,8 +56,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def cmd_status(app: App) -> int:
     con = make_console()
-    print_splash(con)
-    con.print(f"[dim]v{VERSION}[/]\n")
+    print_banner(con)
     pf = app.init()
     for m in pf.messages:
         con.print(m)

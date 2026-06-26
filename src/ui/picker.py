@@ -1,12 +1,10 @@
-"""Paginated list picker with search — Termux friendly."""
+"""Paginated list picker — simple."""
 
 from __future__ import annotations
 
 from typing import Optional
 
 from rich.console import Console
-from rich.panel import Panel
-from rich.text import Text
 
 from .theme import PROMPT, PROMPT_SYMBOL
 
@@ -20,9 +18,8 @@ def pick_from_list(
     *,
     page_size: int = PAGE_SIZE,
 ) -> Optional[int]:
-    """Return global index in *options*, or None."""
     if not options:
-        console.print("[red]Tidak ada data.[/]")
+        console.print("[red]Kosong.[/]")
         return None
 
     filter_q = ""
@@ -30,13 +27,12 @@ def pick_from_list(
 
     while True:
         if filter_q:
-            fq = filter_q.lower()
-            filtered = [o for o in options if fq in o.lower()]
+            filtered = [o for o in options if filter_q.lower() in o.lower()]
         else:
             filtered = options
 
         if not filtered:
-            console.print(f"[yellow]Tidak ada hasil untuk '{filter_q}'[/]")
+            console.print(f"[yellow]Tidak ada '{filter_q}'[/]")
             filter_q = ""
             page = 0
             continue
@@ -49,23 +45,13 @@ def pick_from_list(
         page_items = filtered[start : start + page_size]
 
         console.print()
-        console.print(
-            Panel(
-                f"[dim]Hal {page + 1}/{total_pages}[/] · [white]{len(filtered)}[/] item"
-                + (f" · filter [cyan]{filter_q}[/]" if filter_q else ""),
-                title=f"[bold]{title}[/]",
-                border_style="bright_black",
-                padding=(0, 1),
-            )
-        )
-        console.print(
-            "[dim][S][/] cari  [dim][N][/] next  [dim][P][/] prev  [dim][0][/] kembali\n"
-        )
+        console.print(f"[bold]{title}[/]  [dim]({page + 1}/{total_pages})[/]")
+        if filter_q:
+            console.print(f"[dim]filter: {filter_q}[/]")
+        console.print("[dim]nomor | S cari | N/P halaman | 0 kembali[/]\n")
 
         for i, label in enumerate(page_items, start + 1):
-            num = Text(f" {i:>2} ", style="bold white on dark_blue")
-            line = num + Text(" ") + Text(label)
-            console.print(line, soft_wrap=True, overflow="fold")
+            console.print(f"  [cyan]{i:>2}.[/] {label}")
 
         try:
             raw = console.input(f"\n[{PROMPT}]{PROMPT_SYMBOL}[/] ").strip()
@@ -75,21 +61,15 @@ def pick_from_list(
         low = raw.lower()
         if low in ("0", ""):
             return None
-        if low == "n":
-            if page < total_pages - 1:
-                page += 1
-            else:
-                console.print("[dim]Sudah halaman terakhir.[/]")
+        if low == "n" and page < total_pages - 1:
+            page += 1
             continue
-        if low == "p":
-            if page > 0:
-                page -= 1
-            else:
-                console.print("[dim]Sudah halaman pertama.[/]")
+        if low == "p" and page > 0:
+            page -= 1
             continue
         if low == "s":
             try:
-                filter_q = console.input("[cyan]Cari:[/] ").strip()
+                filter_q = console.input("cari: ").strip()
             except (EOFError, KeyboardInterrupt):
                 return None
             page = 0
@@ -98,19 +78,14 @@ def pick_from_list(
         try:
             num = int(raw)
         except ValueError:
-            console.print("[red]Input tidak valid.[/]")
+            console.print("[red]?[/]")
             continue
 
         if 1 <= num <= len(page_items):
-            chosen = page_items[num - 1]
-            return options.index(chosen)
+            return options.index(page_items[num - 1])
 
-        console.print(f"[red]Pilih 1-{len(page_items)}[/]")
+        console.print(f"[red]1-{len(page_items)}[/]")
 
 
-def pick_skin_labels(
-    console: Console,
-    labels: list[str],
-    title: str,
-) -> Optional[int]:
+def pick_skin_labels(console: Console, labels: list[str], title: str) -> Optional[int]:
     return pick_from_list(console, labels, title, page_size=15)
