@@ -9,6 +9,8 @@ from pathlib import Path
 from typing import Any, Optional
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 from .config import CACHE_DIR
 from .errors import ApiError
@@ -36,6 +38,10 @@ class ApiClient:
         self.ua = api.get("user_agent", "MLBB-Skin-Injector/1.0")
         self.session = requests.Session()
         self.session.headers.update({"User-Agent": self.ua})
+        retry = Retry(total=2, backoff_factor=0.3, status_forcelist=(502, 503, 504))
+        adapter = HTTPAdapter(pool_connections=6, pool_maxsize=6, max_retries=retry)
+        self.session.mount("https://", adapter)
+        self.session.mount("http://", adapter)
         self._endpoints: dict[str, str] = {}
         self._name_corpus: set[str] | None = None
 

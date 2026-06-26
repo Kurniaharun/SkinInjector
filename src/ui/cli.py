@@ -51,12 +51,18 @@ def _inject_flow(app: App, skin: SkinItem) -> None:
         console.print(f"[red]Gagal: {e}[/]")
 
 
+def _dl_label(app: App) -> str:
+    if app.injector and getattr(app.injector, "downloader", None):
+        return app.injector.downloader.engine_label()
+    return ""
+
+
 def _render_header(app: App, *, show_banner: bool = False) -> None:
     pf = app.preflight
     if show_banner:
         print_banner(console)
     if pf:
-        print_status(console, pf.backend_name, pf.package or "?")
+        print_status(console, pf.backend_name, pf.package or "?", _dl_label(app))
 
 
 def _render_menu() -> None:
@@ -353,6 +359,8 @@ def menu_status(app: App) -> None:
     except Exception:
         pass
     table.add_row("Index search", str(app.search.count))
+    if app.injector and getattr(app.injector, "downloader", None):
+        table.add_row("Download", app.injector.downloader.engine_label())
     console.print(table)
     for m in pf.messages:
         console.print(m)
@@ -364,19 +372,34 @@ def menu_status(app: App) -> None:
 
 
 def menu_settings(app: App) -> None:
-    opts = ["Auto (root → shizuku → direct)", "Root only", "No-root (Shizuku)"]
-    idx = pick_from_list(console, opts, "Access Mode", page_size=10)
-    if idx is None:
+    section = pick_from_list(
+        console,
+        ["Akses MLBB (root/shizuku)", "Download (aria2/http)"],
+        "Settings",
+        page_size=10,
+    )
+    if section is None:
         return
-    modes = ["auto", "root", "noroot"]
-    app.mode_override = modes[idx]
-    app.cfg.setdefault("access", {})["mode"] = modes[idx]
+
+    if section == 0:
+        opts = ["Auto", "Root only", "No-root Shizuku"]
+        idx = pick_from_list(console, opts, "Akses", page_size=10)
+        if idx is None:
+            return
+        modes = ["auto", "root", "noroot"]
+        app.mode_override = modes[idx]
+        app.cfg.setdefault("access", {})["mode"] = modes[idx]
+    else:
+        opts = ["Auto (aria2 kalau ada)", "Paksa aria2", "HTTP saja"]
+        idx = pick_from_list(console, opts, "Download", page_size=10)
+        if idx is None:
+            return
+        engines = ["auto", "aria2", "requests"]
+        app.cfg.setdefault("download", {})["engine"] = engines[idx]
+
     app.init(force=True)
     pf = app.preflight
-    console.print(f"[green]Mode: {pf.backend_name if pf else '?'}[/]")
-    if pf:
-        for m in pf.messages:
-            console.print(m)
+    console.print(f"[green]OK[/] {_dl_label(app) or pf.backend_name if pf else '?'}")
     _pause()
 
 
@@ -441,7 +464,7 @@ def run_interactive(app: App) -> None:
         else:
             pf = app.preflight
             if pf:
-                print_status(console, pf.backend_name, pf.package or "?")
+                print_status(console, pf.backend_name, pf.package or "?", _dl_label(app))
         _render_menu()
 
         try:

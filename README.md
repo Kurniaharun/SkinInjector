@@ -50,6 +50,7 @@ pkg install python git unzip -y
 git clone https://github.com/Kurniaharun/SkinInjector.git
 cd SkinInjector
 pip install -r requirements.txt
+pkg install aria2 -y    # opsional — download 16x lebih cepat
 ```
 
 ### 3. Jalankan
@@ -160,7 +161,15 @@ SkinInjector/
 
 ---
 
-## Progress Inject
+## Download Cepat (aria2)
+
+Script otomatis pakai **aria2c** kalau terinstall (16 koneksi paralel). Tanpa aria2 → HTTP fallback buffer 256KB.
+
+```bash
+pkg install aria2 -y
+```
+
+Setting: Menu **8** → Download → Auto / aria2 / HTTP
 
 Saat inject tampil:
 

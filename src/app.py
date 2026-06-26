@@ -93,8 +93,14 @@ class App:
         except Exception as e:
             messages.append(f"[i] API: {e} (cache mungkin dipakai)")
 
+        dl = Downloader(self.cfg)
+        if dl._want_aria():
+            messages.append(f"[OK] Download aria2 x{dl.aria_splits}")
+        else:
+            messages.append("[i] Download HTTP — pkg install aria2 untuk turbo")
+
         if self.backend:
-            self.injector = Injector(self.cfg, self.backend, Downloader(self.cfg))
+            self.injector = Injector(self.cfg, self.backend, dl)
 
         self.preflight = PreflightResult(
             ok=ok,

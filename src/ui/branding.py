@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from rich.console import Console
 
-VERSION = "1.5.1"
+VERSION = "1.6.0"
 
 _MENU: list[tuple[str, str]] = [
     ("1", "Browse Hero"),
@@ -42,11 +42,12 @@ def print_banner(console: Console) -> None:
     console.print(f"[dim]v{VERSION}[/]\n")
 
 
-def print_status(console: Console, backend: str, package: str) -> None:
+def print_status(console: Console, backend: str, package: str, download: str = "") -> None:
     pkg = package or "?"
-    if len(pkg) > 36:
-        pkg = "..." + pkg[-33:]
-    console.print(f"[dim]{backend.upper()}[/]  [white]{pkg}[/]\n")
+    if len(pkg) > 32:
+        pkg = "..." + pkg[-29:]
+    extra = f"  [dim]| {download}[/]" if download else ""
+    console.print(f"[dim]{backend.upper()}[/]  [white]{pkg}[/]{extra}\n")
 
 
 def render_menu(console: Console) -> None:

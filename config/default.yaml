@@ -25,7 +25,10 @@ inject:
   auto_rollback_on_fail: true
 
 download:
-  chunk_size: 8192
+  engine: "auto"          # auto | aria2 | requests
+  aria_splits: 16         # koneksi paralel aria2 (-x -s)
+  chunk_size: 262144      # 256KB buffer HTTP fallback
+  timeout: 180
   max_retries: 3
   min_zip_bytes: 1024
 
