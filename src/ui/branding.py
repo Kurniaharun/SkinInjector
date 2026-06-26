@@ -7,19 +7,21 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from rich.console import Console
 
-VERSION = "1.6.0"
+VERSION = "1.7.0"
 
 _MENU: list[tuple[str, str]] = [
     ("1", "Browse Hero"),
-    ("2", "Search Skin"),
-    ("3", "Upgrade Skins"),
-    ("4", "Custom Skins"),
-    ("5", "Restore Default"),
-    ("6", "Status"),
-    ("7", "Refresh Index"),
-    ("8", "Settings"),
-    ("9", "Effects & Recall"),
-    ("10", "Backup Official"),
+    ("2", "Browse by Role"),
+    ("3", "Search Skin"),
+    ("4", "Upgrade Skins"),
+    ("5", "Custom Bundle"),
+    ("6", "Effects & Recall"),
+    ("7", "Restore Default"),
+    ("8", "News / Update"),
+    ("9", "Status"),
+    ("10", "Refresh Index"),
+    ("11", "Settings"),
+    ("12", "Backup Official"),
     ("0", "Keluar"),
 ]
 

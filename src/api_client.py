@@ -24,6 +24,16 @@ EFFECT_CATEGORIES: list[tuple[str, str]] = [
     ("TRAIL ANIMATION", "trail"),
     ("RESPAWN ANIMATION", "respawn"),
     ("PAINTED SKIN", "painted"),
+    ("ELIMINATED BATTLE", "eliminated"),
+]
+
+HERO_ROLES: list[str] = [
+    "Fighter",
+    "Mage",
+    "Marksman",
+    "Tank",
+    "Assassin",
+    "Support",
 ]
 
 LOG = logging.getLogger(__name__)
@@ -184,24 +194,133 @@ class ApiClient:
         self._write_cache(key, flat)
         return [SkinItem.from_hero_entry(x, corpus=corpus) for x in flat if x.get("downloadLink")]
 
-    def get_custom_skins(self, refresh: bool = False) -> list[SkinItem]:
+    def get_custom_bundles(self, refresh: bool = False) -> list[dict[str, Any]]:
+        """Banner koleksi custom (Naruto, Demon Slayer, dll)."""
         ttl = float(self.cfg.get("cache", {}).get("skins_ttl_hours", 1))
-        key = "custom_skins"
+        key = "custom_bundles"
+        if not refresh:
+            c = self._read_cache(key, ttl)
+            if c is not None:
+                return c
+        raw = self._get(self.endpoint("getCustomSkins"))
+        if not isinstance(raw, list):
+            raise ApiError("Format getCustomSkins tidak valid")
+        self._write_cache(key, raw)
+        return raw
+
+    def get_custom_bundle_skins(
+        self,
+        bundle_id: str,
+        bundle_name: str = "",
+        refresh: bool = False,
+    ) -> list[SkinItem]:
+        """Skin dalam koleksi — GET getcustomSkinMenu.php?category={id}."""
+        ttl = float(self.cfg.get("cache", {}).get("skins_ttl_hours", 1))
+        key = f"custom_bundle_{bundle_id}"
         corpus = self.name_corpus(refresh=refresh)
         if not refresh:
             c = self._read_cache(key, ttl)
             if c is not None:
-                return [SkinItem.from_custom_entry(x, corpus) for x in c]
-        url = self.endpoint("getCustomSkins")
+                return [
+                    SkinItem.from_bundle_entry(x, bundle_name, corpus)
+                    for x in c
+                    if x.get("downloadLink") or x.get("url")
+                ]
+        base = self.endpoint("getcustomSkinMenu")
+        url = f"{base}{bundle_id}"
         raw = self._get(url)
         if not isinstance(raw, list):
-            raise ApiError("Format getCustomSkins tidak valid")
+            raise ApiError(f"Format custom bundle {bundle_id} tidak valid")
         self._write_cache(key, raw)
         return [
-            SkinItem.from_custom_entry(x, corpus)
+            SkinItem.from_bundle_entry(x, bundle_name, corpus)
             for x in raw
-            if x.get("url") or x.get("downloadLink")
+            if x.get("downloadLink") or x.get("url")
         ]
+
+    def search_custom_bundles(self, query: str, limit: int = 20) -> list[SkinItem]:
+        q = query.lower().strip()
+        if not q:
+            return []
+        out: list[SkinItem] = []
+        for bundle in self.get_custom_bundles():
+            name = str(bundle.get("name", ""))
+            if q not in name.lower():
+                continue
+            try:
+                skins = self.get_custom_bundle_skins(
+                    str(bundle.get("id", "")),
+                    name,
+                )
+                out.extend(skins[:limit])
+            except ApiError as e:
+                LOG.warning("custom bundle %s: %s", name, e)
+        if len(out) < limit:
+            for bundle in self.get_custom_bundles():
+                bid = str(bundle.get("id", ""))
+                bname = str(bundle.get("name", ""))
+                try:
+                    for skin in self.get_custom_bundle_skins(bid, bname):
+                        if q in skin.label().lower():
+                            out.append(skin)
+                            if len(out) >= limit:
+                                return out
+                except ApiError:
+                    pass
+        return out[:limit]
+
+    def get_custom_skins(self, refresh: bool = False) -> list[SkinItem]:
+        """Legacy — banner saja, pakai get_custom_bundles + get_custom_bundle_skins."""
+        return [
+            SkinItem.from_custom_entry(x, self.name_corpus(refresh=refresh))
+            for x in self.get_custom_bundles(refresh=refresh)
+        ]
+
+    def get_role_categories(self, refresh: bool = False) -> list[dict[str, Any]]:
+        ttl = float(self.cfg.get("cache", {}).get("heroes_ttl_hours", 6))
+        key = "category1_roles"
+        if not refresh:
+            c = self._read_cache(key, ttl)
+            if c is not None:
+                return c
+        raw = self._get(self.endpoint("getCategory1"))
+        if not isinstance(raw, list):
+            raise ApiError("Format getCategory1 tidak valid")
+        self._write_cache(key, raw)
+        return raw
+
+    def list_heroes_by_role(self, role: str, refresh: bool = False) -> list[str]:
+        ttl = float(self.cfg.get("cache", {}).get("heroes_ttl_hours", 6))
+        key = f"heroes_role_{role.lower()}"
+        if not refresh:
+            c = self._read_cache(key, ttl)
+            if isinstance(c, list):
+                return c
+        raw = self._post(self.endpoint("getHeroes"), {"category": role})
+        names: list[str] = []
+        if isinstance(raw, dict):
+            names = sorted(raw.keys(), key=str.lower)
+        elif isinstance(raw, list):
+            for x in raw:
+                if isinstance(x, dict):
+                    n = x.get("heroName") or x.get("heroname") or x.get("name")
+                    if n:
+                        names.append(str(n))
+        self._write_cache(key, names)
+        return names
+
+    def get_announcements(self, refresh: bool = False) -> list[dict[str, Any]]:
+        ttl = float(self.cfg.get("cache", {}).get("endpoints_ttl_hours", 24))
+        key = "announcements"
+        if not refresh:
+            c = self._read_cache(key, ttl)
+            if c is not None:
+                return c
+        raw = self._get(self.endpoint("getAnnouncement"))
+        if not isinstance(raw, list):
+            raise ApiError("Format getAnnouncement tidak valid")
+        self._write_cache(key, raw)
+        return raw
 
     def get_effects(self, category: str, refresh: bool = False) -> list[SkinItem]:
         """Recall, emote, trail, respawn, painted — POST getEmotes."""

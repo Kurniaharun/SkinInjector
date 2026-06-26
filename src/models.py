@@ -93,6 +93,7 @@ class SkinItem:
             "RESPAWN ANIMATION": "respawn",
             "Emotes": "emote",
             "PAINTED SKIN": "painted",
+            "ELIMINATED BATTLE": "eliminated",
         }
         return cls(
             id=str(data.get("id", "")),
@@ -104,6 +105,32 @@ class SkinItem:
             mini_patch=bool(int(data.get("mini_patch", 0) or 0)),
             source=source_map.get(cat, "effect"),
             api_category=cat,
+        )
+
+    @classmethod
+    def from_bundle_entry(
+        cls,
+        data: dict[str, Any],
+        bundle_name: str = "",
+        corpus: set[str] | None = None,
+    ) -> SkinItem:
+        img = str(data.get("img", ""))
+        dl = str(data.get("downloadLink", data.get("url", "")))
+        raw_skin = str(
+            data.get("heroname", data.get("heroName", data.get("name", data.get("skinName", ""))))
+        )
+        hero = str(data.get("heroName", data.get("heroname", bundle_name)))
+        skin_name = resolve_name(raw_skin, hero=hero, img=img, download=dl, corpus=corpus)
+        return cls(
+            id=str(data.get("id", "")),
+            hero_name=bundle_name or hero,
+            skin_name=skin_name,
+            image_url=img,
+            download_url=dl,
+            category=bundle_name,
+            mini_patch=bool(int(data.get("mini_patch", 0) or 0)),
+            source="custom_bundle",
+            api_category=raw_skin,
         )
 
     @classmethod

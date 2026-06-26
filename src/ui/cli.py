@@ -13,6 +13,7 @@ from rich.table import Table
 from ..app import App
 from ..errors import InjectorError
 from ..models import SkinItem
+from ..api_client import HERO_ROLES
 from .branding import print_banner, print_goodbye, print_status, render_menu
 from .console import make_console
 from .picker import pick_from_list, pick_skin_labels
@@ -109,13 +110,19 @@ def menu_search(app: App) -> None:
     except Exception as e:
         LOG.warning("upgrade search: %s", e)
 
-    # 3) Effects (recall, emote, dll)
+    # 3) Effects (recall, emote, eliminated, dll)
     try:
         results.extend(app.api.search_effects(query))
     except Exception as e:
         LOG.warning("effect search: %s", e)
 
-    # 4) Fallback index lokal
+    # 4) Custom bundle (Naruto, Demon Slayer, dll)
+    try:
+        results.extend(app.api.search_custom_bundles(query))
+    except Exception as e:
+        LOG.warning("custom bundle search: %s", e)
+
+    # 5) Fallback index lokal
     if len(results) < 3:
         run_busy(console, "Memuat index lokal...", app.search.ensure_for_search)
         results.extend(app.search.search(query))
@@ -138,6 +145,52 @@ def menu_search(app: App) -> None:
     idx = pick_from_list(console, labels, f"Hasil '{query}'")
     if idx is not None:
         _inject_flow(app, unique[idx])
+    _pause()
+
+
+def menu_browse_by_role(app: App) -> None:
+    roles = list(HERO_ROLES)
+    try:
+        cats = app.api.get_role_categories()
+        api_roles = [str(x.get("name", "")) for x in cats if x.get("name")]
+        if api_roles:
+            roles = api_roles
+    except Exception as e:
+        LOG.warning("role categories: %s", e)
+
+    console.print(f"\n[bold]Browse by Role[/]  [dim]{len(roles)}[/]")
+    idx = pick_from_list(console, roles, "Pilih Role")
+    if idx is None:
+        return
+
+    role = roles[idx]
+    try:
+        names = run_busy(console, f"Loading {role}...", lambda: app.api.list_heroes_by_role(role))
+    except Exception as e:
+        console.print(f"[red]{e}[/]")
+        _pause()
+        return
+    if not names:
+        console.print("[yellow]Tidak ada hero untuk role ini.[/]")
+        _pause()
+        return
+
+    console.print(f"\n[bold]{role}[/]  [dim]{len(names)} hero[/]")
+    hidx = pick_from_list(console, names, f"Hero — {role}")
+    if hidx is None:
+        return
+
+    hero = names[hidx]
+    try:
+        skins = run_busy(console, "Loading...", lambda: app.api.get_skins_for_hero(hero))
+    except Exception as e:
+        console.print(f"[red]{e}[/]")
+        _pause()
+        return
+
+    skin = _pick_skin(skins, f"Skin — {hero}")
+    if skin:
+        _inject_flow(app, skin)
     _pause()
 
 
@@ -286,14 +339,66 @@ def menu_api_backup(app: App) -> None:
 
 def menu_custom(app: App) -> None:
     try:
-        skins = run_busy(console, "Memuat custom skins...", app.api.get_custom_skins)
+        bundles = run_busy(console, "Memuat koleksi...", app.api.get_custom_bundles)
     except Exception as e:
         console.print(f"[red]{e}[/]")
         _pause()
         return
-    skin = _pick_skin(skins, "Custom skin")
+    if not bundles:
+        console.print("[yellow]Kosong.[/]")
+        _pause()
+        return
+
+    labels = [str(b.get("name", f"Bundle {b.get('id', '?')}")) for b in bundles]
+    console.print(f"\n[bold]Custom Bundle[/]  [dim]{len(labels)} koleksi[/]")
+    idx = pick_from_list(console, labels, "Pilih Koleksi")
+    if idx is None:
+        return
+
+    bundle = bundles[idx]
+    bid = str(bundle.get("id", ""))
+    bname = labels[idx]
+    try:
+        skins = run_busy(
+            console,
+            f"Memuat {bname}...",
+            lambda: app.api.get_custom_bundle_skins(bid, bname),
+        )
+    except Exception as e:
+        console.print(f"[red]{e}[/]")
+        _pause()
+        return
+
+    skin = _pick_skin(skins, f"Custom — {bname}")
     if skin:
         _inject_flow(app, skin)
+    _pause()
+
+
+def menu_announcements(app: App) -> None:
+    try:
+        items = run_busy(console, "Memuat berita...", app.api.get_announcements)
+    except Exception as e:
+        console.print(f"[red]{e}[/]")
+        _pause()
+        return
+    if not items:
+        console.print("[yellow]Belum ada pengumuman.[/]")
+        _pause()
+        return
+
+    console.print(f"\n[bold]News / Update[/]  [dim]{len(items)}[/]\n")
+    for i, item in enumerate(items, 1):
+        name = str(item.get("name", item.get("title", f"#{i}")))
+        date = str(item.get("date", item.get("created", "")))
+        des = str(item.get("des", item.get("description", "")))
+        console.print(f"[cyan]{i}.[/] [bold]{name}[/]")
+        if date:
+            console.print(f"   [dim]{date}[/]")
+        if des:
+            short = des if len(des) <= 200 else des[:197] + "..."
+            console.print(f"   {short}")
+        console.print()
     _pause()
 
 
@@ -302,7 +407,7 @@ def menu_restore(app: App) -> None:
     if not backups:
         console.print("[yellow]Belum ada backup lokal.[/]")
         console.print("[dim]Backup lokal dibuat otomatis saat inject pertama.[/]")
-        console.print("[dim]Atau pakai menu [10] Backup Official API.[/]")
+        console.print("[dim]Atau pakai menu [12] Backup Official API.[/]")
         _pause()
         return
     labels = [
@@ -356,6 +461,9 @@ def menu_status(app: App) -> None:
         table.add_row("Upgrade skin", str(len(app.api.get_upgrade_menu())))
         table.add_row("Recall", str(len(app.api.get_effects("Recall Animations"))))
         table.add_row("Emotes", str(len(app.api.get_effects("Emotes"))))
+        table.add_row("Eliminated", str(len(app.api.get_effects("ELIMINATED BATTLE"))))
+        table.add_row("Custom bundle", str(len(app.api.get_custom_bundles())))
+        table.add_row("News", str(len(app.api.get_announcements())))
     except Exception:
         pass
     table.add_row("Index search", str(app.search.count))
@@ -445,15 +553,17 @@ def run_interactive(app: App) -> None:
 
     actions: dict[str, Callable[[App], None]] = {
         "1": menu_browse_heroes,
-        "2": menu_search,
-        "3": menu_upgrade,
-        "4": menu_custom,
-        "5": menu_restore,
-        "6": menu_status,
-        "7": menu_refresh_full,
-        "8": menu_settings,
-        "9": menu_effects,
-        "10": menu_api_backup,
+        "2": menu_browse_by_role,
+        "3": menu_search,
+        "4": menu_upgrade,
+        "5": menu_custom,
+        "6": menu_effects,
+        "7": menu_restore,
+        "8": menu_announcements,
+        "9": menu_status,
+        "10": menu_refresh_full,
+        "11": menu_settings,
+        "12": menu_api_backup,
     }
 
     while True:

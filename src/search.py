@@ -167,11 +167,19 @@ class SearchIndex:
                     LOG.debug("upgrade %s: %s", label, e)
 
         if on_progress:
-            on_progress("Custom skins...", 85, 100)
+            on_progress("Custom bundles...", 85, 100)
         try:
-            items.extend(self.api.get_custom_skins(refresh=refresh))
+            for bundle in self.api.get_custom_bundles(refresh=refresh):
+                bid = str(bundle.get("id", ""))
+                bname = str(bundle.get("name", ""))
+                try:
+                    items.extend(
+                        self.api.get_custom_bundle_skins(bid, bname, refresh=refresh)
+                    )
+                except Exception as e:
+                    LOG.debug("bundle %s: %s", bname, e)
         except Exception as e:
-            LOG.warning("custom: %s", e)
+            LOG.warning("custom bundles: %s", e)
 
         unique = _dedupe(items)
         self._items = unique
