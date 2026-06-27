@@ -9,7 +9,7 @@ from .api_client import EFFECT_CATEGORIES, HERO_ROLES
 from .catalog_store import catalog_ready, read_json
 from .errors import CatalogNotFoundError
 from .models import SkinItem
-from .name_resolver import resolve_category_label
+from .name_resolver import resolve_category_label, resolve_upgrade_menu_label
 from .skin_grade import SKIN_GRADES, detect_skin_grade
 
 LOG = logging.getLogger(__name__)
@@ -119,7 +119,7 @@ class LocalCatalog:
             self._upgrade_labels = list(saved_labels)
         else:
             self._upgrade_labels = [
-                resolve_category_label(x, self._corpus) for x in self._upgrade_menu
+                resolve_upgrade_menu_label(x, self._corpus) for x in self._upgrade_menu
             ]
 
         self._hero_names = sorted(self._heroes_raw.keys(), key=str.lower)
@@ -145,7 +145,7 @@ class LocalCatalog:
             idx = self._upgrade_menu.index(entry)
             return self._upgrade_labels[idx]
         except ValueError:
-            return resolve_category_label(entry, self._corpus)
+            return resolve_upgrade_menu_label(entry, self._corpus)
 
     def get_upgrade_menu(self, refresh: bool = False) -> list[dict[str, Any]]:
         self.warmup()

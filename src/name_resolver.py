@@ -197,12 +197,84 @@ def resolve_name(
         text = strip_markup(str(hint))
         if not text or is_truncated(text):
             continue
+        low = text.lower()
         if PAREN.search(str(hint)) or "(" in str(hint):
-            if len(text) > len(prefix) + 1:
-                return text
+            # Harus relevan dengan prefix — jangan ambil "(1)" random dari corpus
+            if len(prefix_low) >= 2 and (low.startswith(prefix_low) or prefix_low in low):
+                if len(text) > len(prefix) + 1:
+                    return text
 
     completed = _complete_core(prefix)
     return completed if completed else name
+
+
+def resolve_upgrade_menu_label(entry: dict[str, Any], corpus: set[str] | None = None) -> str:
+    """Label menu upgrade — expand dari img URL, bukan corpus global."""
+    raw = strip_markup(str(entry.get("heroName") or entry.get("name") or ""))
+    img = str(entry.get("img", ""))
+    download = str(entry.get("downloadLink") or entry.get("url") or "")
+
+    if not raw:
+        return raw
+    if not is_truncated(raw):
+        return raw
+
+    if " - " not in raw:
+        return resolve_name(raw, img=img, download=download, corpus=corpus)
+
+    hero_part, skin_part = raw.split(" - ", 1)
+    hero_part = hero_part.strip()
+    skin_prefix = TRUNC_MARK.sub("", skin_part).rstrip(". ").strip()
+    sp_low = skin_prefix.lower()
+    token = sp_low.split()[-1] if sp_low else ""
+
+    if token in SHORT_TOKEN:
+        return f"{hero_part} - {SHORT_TOKEN[token]}"
+
+    hints = extract_url_hints(img, download)
+
+    for hint in hints:
+        hl = strip_markup(hint)
+        hlow = hl.lower()
+        # Skip hint ID/nomor dari path gambar (mis. "73 Harith")
+        if re.match(r"^\d", hl):
+            continue
+        if hlow.startswith(hero_part.lower()):
+            rest = hl[len(hero_part) :].strip(" -_")
+            if rest and len(rest) >= 2:
+                return f"{hero_part} - {rest}"
+        if sp_low and len(sp_low) >= 2 and sp_low in hlow:
+            return f"{hero_part} - {hl}"
+        if hero_part.lower() in hlow:
+            tokens = [t for t in hl.split() if t.lower() != hero_part.lower() and t.lower() not in SKIP]
+            if tokens:
+                return f"{hero_part} - {' '.join(tokens)}"
+
+    if corpus and len(sp_low) >= 3:
+        best = ""
+        for candidate in corpus:
+            text = strip_markup(str(candidate))
+            if is_truncated(text):
+                continue
+            low = text.lower()
+            if low.startswith(sp_low) and len(text) > len(best):
+                best = text
+        if best:
+            return f"{hero_part} - {best}"
+
+    if skin_prefix:
+        token_resolved = resolve_name(
+            skin_part,
+            hero=hero_part,
+            img=img,
+            download=download,
+            corpus=None,
+        )
+        if token_resolved and not is_truncated(token_resolved):
+            return f"{hero_part} - {token_resolved}"
+        return f"{hero_part} - {skin_prefix}"
+
+    return resolve_name(raw, img=img, download=download, corpus=corpus)
 
 
 def resolve_category_label(entry: dict[str, Any], corpus: set[str] | None = None) -> str:

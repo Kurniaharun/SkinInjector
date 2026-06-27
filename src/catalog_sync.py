@@ -9,7 +9,7 @@ from typing import Any, Callable, Optional
 from .api_client import EFFECT_CATEGORIES, HERO_ROLES, ApiClient
 from .catalog_store import CATALOG_DIR, write_json, write_meta
 from .errors import ApiError
-from .name_resolver import build_name_corpus, resolve_category_label
+from .name_resolver import build_name_corpus, resolve_upgrade_menu_label
 
 LOG = logging.getLogger(__name__)
 
@@ -167,7 +167,7 @@ class CatalogSync:
         write_json("name_corpus", corpus)
 
         upgrade_labels = [
-            resolve_category_label(x, set(corpus)) for x in upgrade_menu
+            resolve_upgrade_menu_label(x, set(corpus)) for x in upgrade_menu
         ]
         write_json("upgrade_labels", upgrade_labels)
 
