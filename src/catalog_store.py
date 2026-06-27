@@ -27,6 +27,7 @@ FILES = {
     "role_categories": "role_categories.json",
     "heroes_by_role": "heroes_by_role.json",
     "name_corpus": "name_corpus.json",
+    "upgrade_labels": "upgrade_labels.json",
 }
 
 

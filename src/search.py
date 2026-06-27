@@ -1,11 +1,10 @@
-"""Search heroes and skins — fast light index + optional full build."""
+"""Search heroes and skins — index dari katalog RAM."""
 
 from __future__ import annotations
 
 import json
 import logging
 import re
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from difflib import SequenceMatcher
 from typing import TYPE_CHECKING, Callable, Optional
 
@@ -110,18 +109,11 @@ class SearchIndex:
             return False
 
     def build_light(self, refresh: bool = False) -> int:
-        """Cepat: heroes + custom dari katalog lokal."""
-        if refresh and hasattr(self.api, "invalidate_cache"):
-            self.api.invalidate_cache()
+        """Cepat: heroes + custom dari RAM."""
+        self.api.warmup()
         items: list[SkinItem] = []
-        try:
-            items.extend(self.api.get_heroes_flat(refresh=refresh))
-        except Exception as e:
-            LOG.warning("heroes: %s", e)
-        try:
-            items.extend(self.api.get_custom_skins(refresh=refresh))
-        except Exception as e:
-            LOG.warning("custom: %s", e)
+        items.extend(self.api.get_heroes_flat())
+        items.extend(self.api.get_custom_skins())
         unique = _dedupe(items)
         self._items = unique
         self._loaded = True
@@ -134,60 +126,13 @@ class SearchIndex:
         refresh: bool = False,
         on_progress: Optional[ProgressCb] = None,
     ) -> int:
-        """Lengkap: termasuk semua upgrade skin dari katalog lokal."""
-        if refresh and hasattr(self.api, "invalidate_cache"):
-            self.api.invalidate_cache()
-        items: list[SkinItem] = []
-        try:
-            if on_progress:
-                on_progress("Mengambil daftar hero...", 0, 100)
-            items.extend(self.api.get_heroes_flat(refresh=refresh))
-        except Exception as e:
-            LOG.warning("heroes: %s", e)
-
-        heroes: list[dict] = []
-        try:
-            heroes = self.api.get_upgrade_menu(refresh=refresh)
-        except Exception as e:
-            LOG.warning("upgrade menu: %s", e)
-
-        total_h = max(len(heroes), 1)
-        done = 0
-
-        def _fetch_one(entry: dict) -> list[SkinItem]:
-            return self.api.get_upgrade_skins_for_entry(entry, refresh=refresh)
-
-        workers = min(8, max(2, total_h // 10))
-        with ThreadPoolExecutor(max_workers=workers) as pool:
-            futures = {pool.submit(_fetch_one, h): h for h in heroes}
-            for fut in as_completed(futures):
-                entry = futures[fut]
-                label = str(entry.get("heroName", "?"))[:30]
-                done += 1
-                if on_progress:
-                    pct = int(done * 70 / total_h)
-                    on_progress(f"Upgrade: {label}", pct, 100)
-                try:
-                    items.extend(fut.result())
-                except Exception as e:
-                    LOG.debug("upgrade %s: %s", label, e)
-
+        """Lengkap: semua skin dari katalog RAM (instant)."""
         if on_progress:
-            on_progress("Custom bundles...", 85, 100)
-        try:
-            for bundle in self.api.get_custom_bundles(refresh=refresh):
-                bid = str(bundle.get("id", ""))
-                bname = str(bundle.get("name", ""))
-                try:
-                    items.extend(
-                        self.api.get_custom_bundle_skins(bid, bname, refresh=refresh)
-                    )
-                except Exception as e:
-                    LOG.debug("bundle %s: %s", bname, e)
-        except Exception as e:
-            LOG.warning("custom bundles: %s", e)
-
-        unique = _dedupe(items)
+            on_progress("Memuat katalog...", 10, 100)
+        self.api.warmup()
+        if on_progress:
+            on_progress("Membangun index...", 50, 100)
+        unique = _dedupe(self.api.all_skins_for_index())
         self._items = unique
         self._loaded = True
         _save_index(unique)
@@ -202,7 +147,6 @@ class SearchIndex:
         return self.build_light(refresh=refresh)
 
     def load(self, allow_build: bool = True) -> None:
-        """Muat index dari disk; build ringan hanya jika belum ada."""
         if self._loaded and self._items:
             return
         if self._load_from_disk():

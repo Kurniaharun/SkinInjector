@@ -128,6 +128,7 @@ def cmd_update(app: App) -> int:
             on_progress=lambda msg, cur, _total: rep.on_step(msg, cur, ""),
         )
         app.api.invalidate_cache()
+        app.api.warmup()
         counts = meta.get("counts", {})
         print(
             f"\nSelesai — {counts.get('heroes', '?')} hero, "

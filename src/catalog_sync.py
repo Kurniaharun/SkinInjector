@@ -9,7 +9,7 @@ from typing import Any, Callable, Optional
 from .api_client import EFFECT_CATEGORIES, HERO_ROLES, ApiClient
 from .catalog_store import CATALOG_DIR, write_json, write_meta
 from .errors import ApiError
-from .name_resolver import build_name_corpus
+from .name_resolver import build_name_corpus, resolve_category_label
 
 LOG = logging.getLogger(__name__)
 
@@ -165,6 +165,11 @@ class CatalogSync:
         entries.extend(upgrade_menu)
         corpus = sorted(build_name_corpus(entries))
         write_json("name_corpus", corpus)
+
+        upgrade_labels = [
+            resolve_category_label(x, set(corpus)) for x in upgrade_menu
+        ]
+        write_json("upgrade_labels", upgrade_labels)
 
         effect_count = sum(len(v) for v in effects.values())
         upgrade_count = sum(len(v) for v in upgrade_skins.values())

@@ -12,7 +12,7 @@ from rich.table import Table
 
 from ..app import App
 from ..catalog_store import catalog_ready, catalog_summary
-from ..errors import CatalogNotFoundError, InjectorError
+from ..errors import InjectorError
 from ..models import SkinItem
 from ..api_client import HERO_ROLES
 from ..skin_grade import SKIN_GRADES, grade_label
@@ -20,7 +20,7 @@ from .branding import print_banner, print_goodbye, print_status, render_menu
 from .console import make_console
 from .picker import pick_from_list, pick_skin_labels
 from .progress_ui import RichInjectReporter
-from .screen import busy, clear_screen, run_busy
+from .screen import busy, clear_screen
 from .theme import PROMPT, PROMPT_SYMBOL
 
 console = make_console()
@@ -91,45 +91,18 @@ def menu_search(app: App) -> None:
     if not query:
         return
 
-    results: list[SkinItem] = []
+    app.search.ensure_for_search()
+    results: list[SkinItem] = list(app.search.search(query))
 
-    # 1) Cari di hero groups (cepat, 1 API cache)
-    try:
-        hero_hits = app.api.search_hero_names(query)
-        for hero in hero_hits[:8]:
+    if len(results) < 5:
+        app.api.warmup()
+        for hero in app.api.search_hero_names(query)[:6]:
             results.extend(app.api.get_skins_for_hero(hero))
-    except Exception as e:
-        LOG.warning("hero search: %s", e)
-
-    # 2) Cari di upgrade list
-    try:
-        for entry in app.api.search_upgrade_entries(query)[:15]:
-            cat = str(entry.get("heroName", ""))
-            try:
-                results.extend(app.api.get_upgrade_skins(cat))
-            except Exception:
-                pass
-    except Exception as e:
-        LOG.warning("upgrade search: %s", e)
-
-    # 3) Effects (recall, emote, eliminated, dll)
-    try:
+        for entry in app.api.search_upgrade_entries(query)[:10]:
+            results.extend(app.api.get_upgrade_skins_for_entry(entry))
         results.extend(app.api.search_effects(query))
-    except Exception as e:
-        LOG.warning("effect search: %s", e)
-
-    # 4) Custom bundle (Naruto, Demon Slayer, dll)
-    try:
         results.extend(app.api.search_custom_bundles(query))
-    except Exception as e:
-        LOG.warning("custom bundle search: %s", e)
 
-    # 5) Fallback index lokal
-    if len(results) < 3:
-        run_busy(console, "Memuat index lokal...", app.search.ensure_for_search)
-        results.extend(app.search.search(query))
-
-    # dedupe
     seen: set[str] = set()
     unique: list[SkinItem] = []
     for s in results:
@@ -167,7 +140,7 @@ def menu_browse_by_role(app: App) -> None:
 
     role = roles[idx]
     try:
-        names = run_busy(console, f"Loading {role}...", lambda: app.api.list_heroes_by_role(role))
+        names = app.api.list_heroes_by_role(role)
     except Exception as e:
         console.print(f"[red]{e}[/]")
         _pause()
@@ -184,7 +157,7 @@ def menu_browse_by_role(app: App) -> None:
 
     hero = names[hidx]
     try:
-        skins = run_busy(console, "Loading...", lambda: app.api.get_skins_for_hero(hero))
+        skins = app.api.get_skins_for_hero(hero)
     except Exception as e:
         console.print(f"[red]{e}[/]")
         _pause()
@@ -198,7 +171,7 @@ def menu_browse_by_role(app: App) -> None:
 
 def menu_browse_heroes(app: App) -> None:
     try:
-        names = run_busy(console, "Loading...", app.api.list_hero_names)
+        names = app.api.list_hero_names()
     except Exception as e:
         console.print(f"[red]{e}[/]")
         _pause()
@@ -215,7 +188,7 @@ def menu_browse_heroes(app: App) -> None:
 
     hero = names[idx]
     try:
-        skins = run_busy(console, "Loading...", lambda: app.api.get_skins_for_hero(hero))
+        skins = app.api.get_skins_for_hero(hero)
     except Exception as e:
         console.print(f"[red]{e}[/]")
         _pause()
@@ -229,7 +202,8 @@ def menu_browse_heroes(app: App) -> None:
 
 def menu_upgrade(app: App) -> None:
     try:
-        menu = run_busy(console, "Loading...", app.api.get_upgrade_menu)
+        menu = app.api.get_upgrade_menu()
+        labels = app.api.get_upgrade_menu_labels()
     except Exception as e:
         console.print(f"[red]{e}[/]")
         _pause()
@@ -239,7 +213,6 @@ def menu_upgrade(app: App) -> None:
         _pause()
         return
 
-    labels = [app.api.upgrade_menu_label(x) for x in menu]
     console.print(f"\n[bold]Upgrade[/]  [dim]{len(labels)}[/]")
 
     idx = pick_from_list(console, labels, "Pilih Upgrade")
@@ -247,10 +220,9 @@ def menu_upgrade(app: App) -> None:
         return
 
     entry = menu[idx]
-    cat = str(entry.get("heroName", ""))
     cat_label = labels[idx]
     try:
-        skins = run_busy(console, "Loading...", lambda: app.api.get_upgrade_skins_for_entry(entry))
+        skins = app.api.get_upgrade_skins_for_entry(entry)
     except Exception as e:
         console.print(f"[red]{e}[/]")
         _pause()
@@ -277,7 +249,7 @@ def menu_effects(app: App) -> None:
 
     cat_name, _src = cats[idx]
     try:
-        items = run_busy(console, "Loading...", lambda: app.api.get_effects(cat_name))
+        items = app.api.get_effects(cat_name)
     except Exception as e:
         console.print(f"[red]Gagal: {e}[/]")
         _pause()
@@ -297,7 +269,7 @@ def menu_effects(app: App) -> None:
 def menu_api_backup(app: App) -> None:
     console.print("\n[bold]Backup API[/]")
     try:
-        names = run_busy(console, "Memuat hero...", app.api.list_hero_names)
+        names = app.api.list_hero_names()
     except Exception as e:
         console.print(f"[red]{e}[/]")
         _pause()
@@ -309,11 +281,7 @@ def menu_api_backup(app: App) -> None:
 
     hero = names[idx]
     try:
-        backups = run_busy(
-            console,
-            f"Mencari backup {hero}...",
-            lambda: app.api.list_backup_skins(hero),
-        )
+        backups = app.api.list_backup_skins(hero)
     except Exception as e:
         console.print(f"[red]{e}[/]")
         _pause()
@@ -341,7 +309,7 @@ def menu_api_backup(app: App) -> None:
 
 def menu_custom(app: App) -> None:
     try:
-        bundles = run_busy(console, "Memuat koleksi...", app.api.get_custom_bundles)
+        bundles = app.api.get_custom_bundles()
     except Exception as e:
         console.print(f"[red]{e}[/]")
         _pause()
@@ -361,11 +329,7 @@ def menu_custom(app: App) -> None:
     bid = str(bundle.get("id", ""))
     bname = labels[idx]
     try:
-        skins = run_busy(
-            console,
-            f"Memuat {bname}...",
-            lambda: app.api.get_custom_bundle_skins(bid, bname),
-        )
+        skins = app.api.get_custom_bundle_skins(bid, bname)
     except Exception as e:
         console.print(f"[red]{e}[/]")
         _pause()
@@ -379,7 +343,7 @@ def menu_custom(app: App) -> None:
 
 def menu_announcements(app: App) -> None:
     try:
-        items = run_busy(console, "Memuat berita...", app.api.get_announcements)
+        items = app.api.get_announcements()
     except Exception as e:
         console.print(f"[red]{e}[/]")
         _pause()
@@ -503,16 +467,8 @@ def menu_advanced_batch(app: App) -> None:
     role = roles[ridx]
 
     try:
-        counts = run_busy(
-            console,
-            f"Scan {role}...",
-            lambda: app.api.grade_counts_for_role(role),
-        )
-        heroes_in_role = run_busy(
-            console,
-            "Loading...",
-            lambda: app.api.list_heroes_by_role(role),
-        )
+        counts = app.api.grade_counts_for_role(role)
+        heroes_in_role = app.api.list_heroes_by_role(role)
     except Exception as e:
         console.print(f"[red]{e}[/]")
         _pause()
@@ -538,11 +494,7 @@ def menu_advanced_batch(app: App) -> None:
 
     grade = grade_keys[gidx]
     try:
-        matches = run_busy(
-            console,
-            "Menyiapkan daftar...",
-            lambda: app.api.find_skins_for_role_grade(role, grade),
-        )
+        matches = app.api.find_skins_for_role_grade(role, grade)
     except Exception as e:
         console.print(f"[red]{e}[/]")
         _pause()
@@ -725,11 +677,6 @@ def run_interactive(app: App) -> None:
     with busy(console, "Loading..."):
         pf = app.init()
         app.search.load(allow_build=False)
-        if catalog_ready():
-            try:
-                run_busy(console, "Katalog...", app.api.list_hero_names)
-            except CatalogNotFoundError:
-                pass
 
     first_draw = True
 

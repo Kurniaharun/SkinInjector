@@ -107,6 +107,7 @@ class App:
         if catalog_ready():
             try:
                 self.api.load_endpoints()
+                self.api.warmup()
                 messages.append(f"[OK] Katalog lokal — {catalog_summary()}")
             except Exception as e:
                 messages.append(f"[!!] Katalog: {e}")
@@ -204,8 +205,8 @@ class App:
         """Scrape API → JSON lokal (butuh internet)."""
         sync = CatalogSync(self.cfg)
         meta = sync.sync_full(on_progress=on_progress)
-        if hasattr(self.api, "invalidate_cache"):
-            self.api.invalidate_cache()
+        self.api.invalidate_cache()
+        self.api.warmup()
         counts = meta.get("counts", {})
         return (
             f"Katalog di-update — {counts.get('heroes', '?')} hero, "
@@ -219,6 +220,7 @@ class App:
             return "Katalog belum ada — jalankan: python main.py update"
         if hasattr(self.api, "invalidate_cache"):
             self.api.invalidate_cache()
+        self.api.warmup()
         if full:
             n = self.search.build_full(refresh=True)
         else:
