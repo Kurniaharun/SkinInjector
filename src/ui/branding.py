@@ -1,13 +1,18 @@
-"""Branding — simple & clean."""
+"""Branding — SkinJECT by KurrXd."""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from .theme import DIVIDER_CHAR
+
 if TYPE_CHECKING:
     from rich.console import Console
 
-VERSION = "1.8.1"
+APP_NAME = "SkinJECT"
+AUTHOR = "KurrXd"
+VERSION = "2.0.0"
+TAGLINE = "MLBB Skin Injector | Termux | Offline"
 
 _MENU: list[tuple[str, str]] = [
     ("1", "Browse Hero"),
@@ -23,45 +28,87 @@ _MENU: list[tuple[str, str]] = [
     ("11", "Refresh Index"),
     ("12", "Settings"),
     ("13", "Backup Official"),
-    ("14", "Advanced — Batch Apply"),
+    ("14", "Advanced - Batch Apply"),
     ("0", "Keluar"),
 ]
+
+_FIGLET_FONTS = ("slant", "standard", "small", "banner3-D", "doom")
 
 
 def _figlet(text: str) -> str | None:
     try:
         import pyfiglet
 
-        return pyfiglet.figlet_format(text, font="small").rstrip("\n")
+        for font in _FIGLET_FONTS:
+            try:
+                art = pyfiglet.figlet_format(text, font=font).rstrip("\n")
+                if art and max(len(line) for line in art.splitlines()) <= 72:
+                    return art
+            except Exception:
+                continue
     except Exception:
-        return None
+        pass
+    return None
+
+
+def _rule(console: Console, *, style: str = "cyan") -> None:
+    from rich.rule import Rule
+
+    console.print(Rule(style=style, characters=DIVIDER_CHAR))
 
 
 def print_banner(console: Console) -> None:
-    art = _figlet("SKIN INJ")
+    art = _figlet(APP_NAME)
+    console.print()
     if art:
-        console.print(art, style="bold cyan")
+        console.print(art, style="bold bright_cyan")
     else:
-        console.print("[bold cyan]SKIN INJECTOR[/]")
-    console.print(f"[dim]v{VERSION}[/]\n")
+        console.print(
+            "[bold bright_cyan]Skin[/][bold bright_magenta]JECT[/]",
+        )
+    console.print()
+    console.print(f"        [bold bright_magenta]by {AUTHOR}[/]")
+    console.print(f"        [dim]{TAGLINE}  v{VERSION}[/]")
+    console.print()
+    _rule(console, style="bright_cyan")
 
 
 def print_status(console: Console, backend: str, package: str, download: str = "") -> None:
     pkg = package or "?"
-    if len(pkg) > 32:
-        pkg = "..." + pkg[-29:]
-    extra = f"  [dim]| {download}[/]" if download else ""
-    console.print(f"[dim]{backend.upper()}[/]  [white]{pkg}[/]{extra}\n")
+    if len(pkg) > 36:
+        pkg = "..." + pkg[-33:]
+    parts = [f"[bright_cyan]{backend.upper()}[/]", f"[white]{pkg}[/]"]
+    if download:
+        parts.append(f"[dim]{download}[/]")
+    console.print("  ".join(parts))
+    _rule(console, style="dim")
 
 
 def render_menu(console: Console) -> None:
-    console.print("[bold]Menu[/]")
+    from rich.table import Table
+
+    table = Table(
+        show_header=True,
+        header_style="bold bright_cyan",
+        box=None,
+        padding=(0, 1),
+        collapse_padding=True,
+    )
+    table.add_column("#", style="cyan", justify="right", width=3)
+    table.add_column("Menu", style="white")
+
     for key, label in _MENU:
-        if key == "0":
-            console.print()
-        color = "red" if key == "0" else "cyan"
-        console.print(f"  [{color}]{key:>2}[/]  {label}")
+        style = "bold red" if key == "0" else "cyan"
+        table.add_row(f"[{style}]{key}[/]", label)
+
+    console.print()
+    console.print(table)
 
 
 def print_goodbye(console: Console) -> None:
-    console.print("\n[dim]Bye.[/]\n")
+    console.print()
+    _rule(console, style="dim")
+    console.print(
+        f"[bright_cyan]{APP_NAME}[/] [bold bright_magenta]by {AUTHOR}[/]"
+        f"  [dim]- sampai jumpa.[/]\n"
+    )

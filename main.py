@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-MLBB Skin Injector — Termux Python
-Dual mode: root / no-root (Shizuku)
+SkinJECT by KurrXd — MLBB Skin Injector for Termux
+Root / Shizuku · Offline catalog
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ from src.ui.console import make_console
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
-        description="MLBB Skin Injector — inject & restore default skin",
+        description="SkinJECT — MLBB skin inject & restore (by KurrXd)",
     )
     p.add_argument(
         "--mode",

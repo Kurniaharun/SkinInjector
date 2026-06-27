@@ -2,7 +2,7 @@ api:
   base: "https://imb.expressme.in/api/public_connection"
   config_endpoint: "getConnection.php"
   timeout: 30
-  user_agent: "MLBB-Skin-Injector/1.0 Termux"
+  user_agent: "SkinJECT/2.0 KurrXd Termux"
 
 paths:
   storage_root: "/storage/emulated/0"

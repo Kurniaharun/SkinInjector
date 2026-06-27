@@ -11,7 +11,7 @@ MUTED = "dim"
 TITLE = "bold white"
 HIGHLIGHT = "bold magenta"
 
-PROMPT = "bold cyan"
+PROMPT = "bold bright_magenta"
 PROMPT_SYMBOL = ">" if sys.platform == "win32" else "❯"
 DIVIDER_CHAR = "-" if sys.platform == "win32" else "─"
 

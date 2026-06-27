@@ -1,3 +1,3 @@
-"""MLBB Skin Injector - Termux Python toolkit."""
+"""SkinJECT by KurrXd — MLBB skin toolkit for Termux."""
 
-__version__ = "1.0.0"
+__version__ = "2.0.0"
