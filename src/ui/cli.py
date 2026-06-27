@@ -11,7 +11,8 @@ from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn
 from rich.table import Table
 
 from ..app import App
-from ..errors import InjectorError
+from ..catalog_store import catalog_ready, catalog_summary
+from ..errors import CatalogNotFoundError, InjectorError
 from ..models import SkinItem
 from ..api_client import HERO_ROLES
 from ..skin_grade import SKIN_GRADES, grade_label
@@ -407,7 +408,7 @@ def menu_restore(app: App) -> None:
     backups = app.list_backups()
     if not backups:
         console.print("[yellow]Belum ada backup lokal.[/]")
-        console.print("[dim]Pakai menu [12] Backup Official API untuk restore default.[/]")
+        console.print("[dim]Pakai menu [13] Backup Official API untuk restore default.[/]")
         _pause()
         return
     labels = [
@@ -466,6 +467,7 @@ def menu_status(app: App) -> None:
         table.add_row("News", str(len(app.api.get_announcements())))
     except Exception:
         pass
+    table.add_row("Katalog", catalog_summary() if catalog_ready() else "belum ada")
     table.add_row("Index search", str(app.search.count))
     if app.injector and getattr(app.injector, "downloader", None):
         table.add_row("Download", app.injector.downloader.engine_label())
@@ -653,8 +655,48 @@ def menu_settings(app: App) -> None:
     _pause()
 
 
+def menu_update_catalog(app: App) -> None:
+    if not _confirm(
+        "[yellow]Update katalog[/] — download data terbaru dari API.\n"
+        "[dim]Butuh internet. Proses ~1-3 menit.[/]",
+        "Lanjut update? (y/N): ",
+    ):
+        return
+
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[bold]{task.description}"),
+        BarColumn(bar_width=30),
+        TaskProgressColumn(),
+        console=console,
+    ) as progress:
+        task = progress.add_task("Memulai...", total=100)
+
+        def on_prog(msg: str, cur: int, total: int) -> None:
+            progress.update(task, completed=cur, description=msg)
+
+        try:
+            msg = app.update_catalog(on_progress=on_prog)
+        except InjectorError as e:
+            console.print(f"[red]{e}[/]")
+            _pause()
+            return
+
+    console.print(f"[green]{msg}[/]")
+    try:
+        n = app.search.build_full(refresh=True)
+        console.print(f"[green]Search index: {n} skin[/]")
+    except Exception as e:
+        console.print(f"[yellow]Index: {e}[/]")
+    _pause()
+
+
 def menu_refresh_full(app: App) -> None:
-    console.print("[yellow]Refresh index (opsional) — untuk search offline lebih lengkap.[/]")
+    if not catalog_ready():
+        console.print("[yellow]Katalog belum ada — pakai menu [10] Update Katalog dulu.[/]")
+        _pause()
+        return
+    console.print("[dim]Rebuild search index dari katalog lokal (tanpa internet).[/]")
     if not _confirm("Lanjut refresh index?", "Lanjut? (y/N): "):
         return
 
@@ -683,10 +725,11 @@ def run_interactive(app: App) -> None:
     with busy(console, "Loading..."):
         pf = app.init()
         app.search.load(allow_build=False)
-        try:
-            run_busy(console, "API...", app.api.list_hero_names)
-        except Exception:
-            pass
+        if catalog_ready():
+            try:
+                run_busy(console, "Katalog...", app.api.list_hero_names)
+            except CatalogNotFoundError:
+                pass
 
     first_draw = True
 
@@ -703,10 +746,11 @@ def run_interactive(app: App) -> None:
         "7": menu_restore,
         "8": menu_announcements,
         "9": menu_status,
-        "10": menu_refresh_full,
-        "11": menu_settings,
-        "12": menu_api_backup,
-        "13": menu_advanced_batch,
+        "10": menu_update_catalog,
+        "11": menu_refresh_full,
+        "12": menu_settings,
+        "13": menu_api_backup,
+        "14": menu_advanced_batch,
     }
 
     while True:

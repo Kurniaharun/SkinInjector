@@ -6,7 +6,9 @@ import logging
 from dataclasses import dataclass, field
 from typing import Callable, Optional
 
-from .api_client import ApiClient
+from .catalog_store import catalog_ready, catalog_summary
+from .catalog_sync import CatalogSync
+from .local_catalog import LocalCatalog
 from .backends import StorageBackend, pick_backend
 from .backup_manager import BackupManager
 from .config import load_config
@@ -42,7 +44,7 @@ class App:
         self.cfg = load_config()
         self.mode_override = mode
         self.backend: Optional[StorageBackend] = None
-        self.api = ApiClient(self.cfg)
+        self.api = LocalCatalog(self.cfg)
         self.search = SearchIndex(self.api, self.cfg)
         self.injector: Optional[Injector] = None
         self.package: Optional[str] = None
@@ -102,11 +104,16 @@ class App:
         if free:
             messages.append(f"[OK] Free space: {free // (1024 * 1024)} MB")
 
-        try:
-            self.api.load_endpoints()
-            messages.append("[OK] API config loaded")
-        except Exception as e:
-            messages.append(f"[i] API: {e} (cache mungkin dipakai)")
+        if catalog_ready():
+            try:
+                self.api.load_endpoints()
+                messages.append(f"[OK] Katalog lokal — {catalog_summary()}")
+            except Exception as e:
+                messages.append(f"[!!] Katalog: {e}")
+                ok = False
+        else:
+            messages.append("[!!] Katalog belum ada — jalankan: python main.py update")
+            ok = False
 
         dl = Downloader(self.cfg)
         if dl._want_aria():
@@ -190,8 +197,28 @@ class App:
             return []
         return BackupManager(self.backend).list_backups(self.package)
 
+    def update_catalog(
+        self,
+        on_progress=None,
+    ) -> str:
+        """Scrape API → JSON lokal (butuh internet)."""
+        sync = CatalogSync(self.cfg)
+        meta = sync.sync_full(on_progress=on_progress)
+        if hasattr(self.api, "invalidate_cache"):
+            self.api.invalidate_cache()
+        counts = meta.get("counts", {})
+        return (
+            f"Katalog di-update — {counts.get('heroes', '?')} hero, "
+            f"{counts.get('upgrade_skins', '?')} upgrade, "
+            f"{counts.get('effects', '?')} effect"
+        )
+
     def refresh_all(self, full: bool = True) -> str:
-        self.api.load_endpoints(refresh=True)
+        """Rebuild search index dari katalog lokal."""
+        if not catalog_ready():
+            return "Katalog belum ada — jalankan: python main.py update"
+        if hasattr(self.api, "invalidate_cache"):
+            self.api.invalidate_cache()
         if full:
             n = self.search.build_full(refresh=True)
         else:

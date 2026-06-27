@@ -39,3 +39,7 @@ class ApiError(InjectorError):
 
 class ConfigError(InjectorError):
     """Invalid or missing configuration."""
+
+
+class CatalogNotFoundError(InjectorError):
+    """Local catalog JSON belum di-scrape."""

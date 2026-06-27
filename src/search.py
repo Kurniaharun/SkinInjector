@@ -7,11 +7,13 @@ import logging
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from difflib import SequenceMatcher
-from typing import Callable, Optional
+from typing import TYPE_CHECKING, Callable, Optional
 
-from .api_client import ApiClient
 from .config import INDEX_PATH
 from .models import SkinItem
+
+if TYPE_CHECKING:
+    from .local_catalog import LocalCatalog
 
 LOG = logging.getLogger(__name__)
 
@@ -72,7 +74,7 @@ def _save_index(items: list[SkinItem]) -> None:
 
 
 class SearchIndex:
-    def __init__(self, api: ApiClient, cfg: dict) -> None:
+    def __init__(self, api: LocalCatalog, cfg: dict) -> None:
         self.api = api
         self.cfg = cfg
         self.threshold = float(cfg.get("search", {}).get("fuzzy_threshold", 55))
@@ -108,7 +110,9 @@ class SearchIndex:
             return False
 
     def build_light(self, refresh: bool = False) -> int:
-        """Cepat: heroes + custom saja (~5 detik)."""
+        """Cepat: heroes + custom dari katalog lokal."""
+        if refresh and hasattr(self.api, "invalidate_cache"):
+            self.api.invalidate_cache()
         items: list[SkinItem] = []
         try:
             items.extend(self.api.get_heroes_flat(refresh=refresh))
@@ -130,7 +134,9 @@ class SearchIndex:
         refresh: bool = False,
         on_progress: Optional[ProgressCb] = None,
     ) -> int:
-        """Lengkap: termasuk semua upgrade skin (lama, pakai progress)."""
+        """Lengkap: termasuk semua upgrade skin dari katalog lokal."""
+        if refresh and hasattr(self.api, "invalidate_cache"):
+            self.api.invalidate_cache()
         items: list[SkinItem] = []
         try:
             if on_progress:

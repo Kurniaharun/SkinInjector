@@ -16,11 +16,12 @@ CACHE_DIR = DATA_DIR / "cache"
 DOWNLOAD_DIR = DATA_DIR / "downloads"
 BACKUP_DIR = DATA_DIR / "backups"
 LOG_DIR = ROOT_DIR / "logs"
+CATALOG_DIR = DATA_DIR / "catalog"
 INDEX_PATH = DATA_DIR / "heroes_index.json"
 
 
 def _ensure_dirs() -> None:
-    for d in (DATA_DIR, CACHE_DIR, DOWNLOAD_DIR, BACKUP_DIR, LOG_DIR):
+    for d in (DATA_DIR, CACHE_DIR, DOWNLOAD_DIR, BACKUP_DIR, LOG_DIR, CATALOG_DIR):
         d.mkdir(parents=True, exist_ok=True)
 
 

@@ -12,6 +12,8 @@ data/downloads/
 data/backups/
 data/heroes_index.json
 logs/
+# Katalog offline di-track — pull langsung pakai tanpa scrape
+# data/catalog/
 
 # OS / IDE
 .DS_Store

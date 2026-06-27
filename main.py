@@ -15,7 +15,8 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from src.app import App
-from src.errors import InjectorError
+from src.catalog_sync import CatalogSync
+from src.errors import CatalogNotFoundError, InjectorError
 from src.progress import ConsoleReporter
 from src.ui.branding import print_banner, VERSION
 from src.ui.cli import run_interactive
@@ -37,7 +38,8 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("menu", help="Menu interaktif (default)")
 
     sp = sub.add_parser("status", help="Cek status")
-    sp = sub.add_parser("refresh", help="Refresh API cache & search index")
+    sp = sub.add_parser("update", help="Update katalog dari API (butuh internet)")
+    sp = sub.add_parser("refresh", help="Rebuild search index dari katalog lokal")
 
     sp = sub.add_parser("search", help="Cari skin")
     sp.add_argument("query", help="Kata kunci")
@@ -116,6 +118,30 @@ def cmd_restore(app: App, hero_id: str | None, restore_all: bool) -> int:
         return 1
 
 
+def cmd_update(app: App) -> int:
+    print_banner(make_console())
+    app.init()
+    rep = ConsoleReporter()
+    try:
+        print("\n=== UPDATE KATALOG DARI API ===\n")
+        meta = CatalogSync(app.cfg).sync_full(
+            on_progress=lambda msg, cur, _total: rep.on_step(msg, cur, ""),
+        )
+        app.api.invalidate_cache()
+        counts = meta.get("counts", {})
+        print(
+            f"\nSelesai — {counts.get('heroes', '?')} hero, "
+            f"{counts.get('upgrade_skins', '?')} upgrade, "
+            f"{counts.get('effects', '?')} effect"
+        )
+        n = app.search.build_full(refresh=True)
+        print(f"Search index: {n} skin")
+        return 0
+    except InjectorError as e:
+        print(f"Gagal: {e}", file=sys.stderr)
+        return 1
+
+
 def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
@@ -127,6 +153,8 @@ def main() -> int:
         return 0
     if cmd == "status":
         return cmd_status(app)
+    if cmd == "update":
+        return cmd_update(app)
     if cmd == "refresh":
         app.init()
         print(app.refresh_all())

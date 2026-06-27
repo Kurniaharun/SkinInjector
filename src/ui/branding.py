@@ -19,10 +19,11 @@ _MENU: list[tuple[str, str]] = [
     ("7", "Restore Default"),
     ("8", "News / Update"),
     ("9", "Status"),
-    ("10", "Refresh Index"),
-    ("11", "Settings"),
-    ("12", "Backup Official"),
-    ("13", "Advanced — Batch Apply"),
+    ("10", "Update Katalog"),
+    ("11", "Refresh Index"),
+    ("12", "Settings"),
+    ("13", "Backup Official"),
+    ("14", "Advanced — Batch Apply"),
     ("0", "Keluar"),
 ]
 
