@@ -21,3 +21,7 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
+
+# Flutter APK — lokal saja, tidak di-push ke GitHub
+android/
+*.apk
