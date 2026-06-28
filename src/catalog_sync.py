@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Callable, Optional
+from urllib.parse import quote
 
 from .api_client import EFFECT_CATEGORIES, HERO_ROLES, ApiClient
 from .catalog_store import CATALOG_DIR, write_json, write_meta
@@ -96,9 +97,10 @@ class CatalogSync:
                 continue
             try:
                 base = self.remote.endpoint("getcustomSkinMenu")
-                raw = self.remote._get(f"{base}{bid}")
+                raw = self.remote._get(f"{base}{quote(bname, safe='')}")
                 if not isinstance(raw, list):
                     raw = []
+                raw = self.remote.enrich_custom_menu(raw)
                 bundle_skins[bid] = raw
             except ApiError as e:
                 LOG.warning("bundle %s: %s", bname, e)

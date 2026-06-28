@@ -7,6 +7,7 @@ import logging
 import time
 from pathlib import Path
 from typing import Any, Optional
+from urllib.parse import quote
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -195,6 +196,50 @@ class ApiClient:
         self._write_cache(key, flat)
         return [SkinItem.from_hero_entry(x, corpus=corpus) for x in flat if x.get("downloadLink")]
 
+    def _pick_custom_download(self, options: list, hero_name: str) -> dict | None:
+        """Pilih entry download utama (skip Backup/Remove)."""
+        hero_low = hero_name.lower()
+        valid = [x for x in options if x.get("url") or x.get("downloadLink")]
+        if not valid:
+            return None
+        for x in valid:
+            name = str(x.get("name", "")).lower()
+            if "backup" in name or "remove" in name:
+                continue
+            if hero_low in name.lower() or name.lower() in hero_low:
+                return x
+        for x in valid:
+            name = str(x.get("name", "")).lower()
+            if "backup" not in name and "remove" not in name:
+                return x
+        return valid[0]
+
+    def enrich_custom_menu(self, menu: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Ambil URL download per skin via getSkinMenu.php?category={heroName}."""
+        if not menu:
+            return []
+        skin_menu_url = self.endpoint("getSkinMenu")
+        enriched: list[dict[str, Any]] = []
+        for entry in menu:
+            hero = str(entry.get("heroName", ""))
+            if not hero:
+                continue
+            try:
+                raw = self._post(skin_menu_url, {"category": hero})
+                if isinstance(raw, dict):
+                    raw = raw.get("data", raw.get("items", []))
+                if not isinstance(raw, list):
+                    continue
+                pick = self._pick_custom_download(raw, hero)
+                if not pick:
+                    continue
+                merged = {**entry, **pick}
+                if merged.get("url") or merged.get("downloadLink"):
+                    enriched.append(merged)
+            except ApiError as e:
+                LOG.warning("custom enrich %s: %s", hero, e)
+        return enriched
+
     def get_custom_bundles(self, refresh: bool = False) -> list[dict[str, Any]]:
         """Banner koleksi custom (Naruto, Demon Slayer, dll)."""
         ttl = float(self.cfg.get("cache", {}).get("skins_ttl_hours", 1))
@@ -215,7 +260,7 @@ class ApiClient:
         bundle_name: str = "",
         refresh: bool = False,
     ) -> list[SkinItem]:
-        """Skin dalam koleksi — GET getcustomSkinMenu.php?category={id}."""
+        """Skin dalam koleksi — GET getcustomSkinMenu.php?category={nama bundle}."""
         ttl = float(self.cfg.get("cache", {}).get("skins_ttl_hours", 1))
         key = f"custom_bundle_{bundle_id}"
         corpus = self.name_corpus(refresh=refresh)
@@ -227,14 +272,21 @@ class ApiClient:
                     for x in c
                     if x.get("downloadLink") or x.get("url")
                 ]
+        if not bundle_name:
+            for b in self.get_custom_bundles(refresh=refresh):
+                if str(b.get("id", "")) == str(bundle_id):
+                    bundle_name = str(b.get("name", ""))
+                    break
+        category = bundle_name or bundle_id
         base = self.endpoint("getcustomSkinMenu")
-        url = f"{base}{bundle_id}"
+        url = f"{base}{quote(str(category), safe='')}"
         raw = self._get(url)
         if not isinstance(raw, list):
             raise ApiError(f"Format custom bundle {bundle_id} tidak valid")
+        raw = self.enrich_custom_menu(raw)
         self._write_cache(key, raw)
         return [
-            SkinItem.from_bundle_entry(x, bundle_name, corpus)
+            SkinItem.from_bundle_entry(x, bundle_name or category, corpus)
             for x in raw
             if x.get("downloadLink") or x.get("url")
         ]

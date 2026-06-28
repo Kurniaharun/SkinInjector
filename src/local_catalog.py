@@ -215,16 +215,21 @@ class LocalCatalog:
         refresh: bool = False,
     ) -> list[SkinItem]:
         self.warmup()
-        if bundle_id in self._skins_bundle:
-            return self._skins_bundle[bundle_id]
-        entries = self._bundle_raw.get(bundle_id, [])
+        cache_key = str(bundle_id)
+        if cache_key in self._skins_bundle:
+            return self._skins_bundle[cache_key]
         if not bundle_name:
             bundle_name = next(
-                (str(b.get("name", "")) for b in self._bundles if str(b.get("id")) == bundle_id),
+                (str(b.get("name", "")) for b in self._bundles if str(b.get("id")) == cache_key),
                 "",
             )
+        entries = (
+            self._bundle_raw.get(cache_key)
+            or self._bundle_raw.get(bundle_name, [])
+            or []
+        )
         skins = _parse_bundle_entries(bundle_name, entries, self._corpus)
-        self._skins_bundle[bundle_id] = skins
+        self._skins_bundle[cache_key] = skins
         return skins
 
     def search_custom_bundles(self, query: str, limit: int = 20) -> list[SkinItem]:
@@ -402,8 +407,11 @@ class LocalCatalog:
         items.extend(self.get_heroes_flat())
         for key in self._upgrade_raw:
             items.extend(self.get_upgrade_skins(key))
-        for bid in self._bundle_raw:
-            items.extend(self.get_custom_bundle_skins(bid))
+        for bundle in self._bundles:
+            bid = str(bundle.get("id", ""))
+            bname = str(bundle.get("name", ""))
+            if bid:
+                items.extend(self.get_custom_bundle_skins(bid, bname))
         for cat in self._effects_raw:
             items.extend(self.get_effects(cat))
         self._all_skins = items

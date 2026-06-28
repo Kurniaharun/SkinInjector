@@ -170,6 +170,7 @@ class WebApi:
             for entry in self.app.api.search_upgrade_entries(query)[:8]:
                 results.extend(self.app.api.get_upgrade_skins_for_entry(entry))
             results.extend(self.app.api.search_effects(query))
+            results.extend(self.app.api.search_custom_bundles(query))
         seen: set[str] = set()
         out: list[dict[str, Any]] = []
         for s in results:
