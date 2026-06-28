@@ -266,16 +266,16 @@ def main() -> int:
     for pid in sorted(targets):
         if kill_pid(pid, force=args.force):
             killed += 1
-            print(f"  ✓ Matikan PID {pid}")
+            print(f"  OK Matikan PID {pid}")
         else:
-            print(f"  ✗ Gagal matikan PID {pid}")
+            print(f"  X Gagal matikan PID {pid}")
 
     if not args.force and killed:
         time.sleep(0.4)
         still = scan_listeners(extra, any_process=args.all_ports)
         for pid in still:
             if kill_pid(pid, force=True):
-                print(f"  ✓ Force kill PID {pid}")
+                print(f"  OK Force kill PID {pid}")
 
     print("")
     remaining = scan_listeners(extra, any_process=args.all_ports)

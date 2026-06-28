@@ -6,6 +6,7 @@ import json
 import logging
 import mimetypes
 import re
+import socket
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -44,6 +45,68 @@ def _read_body(handler: BaseHTTPRequestHandler) -> dict[str, Any]:
         return {}
     raw = handler.rfile.read(length)
     return json.loads(raw.decode("utf-8"))
+
+
+class SkinjectHTTPServer(ThreadingHTTPServer):
+    allow_reuse_address = True
+    allow_reuse_port = True
+
+
+def _bind_error(exc: BaseException) -> bool:
+    if isinstance(exc, PermissionError):
+        return True
+    if isinstance(exc, OSError):
+        code = getattr(exc, "winerror", None) or getattr(exc, "errno", None)
+        return code in (13, 98, 10013, 10048)
+    return False
+
+
+def _bind_reason(exc: BaseException) -> str:
+    code = getattr(exc, "winerror", None) or getattr(exc, "errno", None)
+    if code in (13, 10013):
+        return "permission denied (butuh root/admin untuk port <1024)"
+    if code in (98, 10048):
+        return "port sudah dipakai"
+    return str(exc)
+
+
+def _can_bind(host: str, port: int) -> tuple[bool, str | None]:
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sock.bind((host, port))
+        return True, None
+    except (PermissionError, OSError) as e:
+        return False, _bind_reason(e)
+    finally:
+        try:
+            sock.close()
+        except OSError:
+            pass
+
+
+def resolve_listen_port(host: str, preferred: int) -> int:
+    """Cari port pertama yang bisa di-bind (fallback otomatis)."""
+    fallbacks = (8080, 8765, 8888)
+    candidates: list[int] = []
+    for p in (preferred, *fallbacks):
+        if p not in candidates:
+            candidates.append(p)
+
+    errors: list[str] = []
+    for port in candidates:
+        ok, reason = _can_bind(host, port)
+        if ok:
+            if port != preferred:
+                print(f"Port {preferred} gagal ({errors[0] if errors else 'tidak tersedia'}) — pakai {port}")
+            return port
+        errors.append(f"{port}: {reason}")
+        LOG.warning("Bind gagal port %s — %s", port, reason)
+
+    msg = "Tidak bisa bind port:\n  " + "\n  ".join(errors)
+    msg += "\nCoba: python server.py --port 8080"
+    msg += "\nAtau matikan proses lama: python killserver.py"
+    raise OSError(msg)
 
 
 class SkinjectHandler(BaseHTTPRequestHandler):
@@ -160,43 +223,20 @@ class SkinjectHandler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
 
-def run_server(host: str = "0.0.0.0", port: int = 80) -> None:
+def run_server(host: str = "0.0.0.0", port: int = 8080) -> None:
     from ..fs_utils import setup_logging
     from ..config import LOG_DIR
 
     setup_logging(LOG_DIR, quiet_console=True)
+    port = resolve_listen_port(host, port)
 
-    def _listen(p: int) -> ThreadingHTTPServer:
-        srv = ThreadingHTTPServer((host, p), SkinjectHandler)
-        print("")
-        print(f"  {APP_NAME} Web — by {AUTHOR}")
-        print(f"  http://localhost:{p}")
-        print(f"  http://127.0.0.1:{p}")
-        print(f"  Buka dari HP: http://<IP-device>:{p}")
-        print("")
-        return srv
-
-    def _bind_error(exc: BaseException) -> bool:
-        if isinstance(exc, PermissionError):
-            return True
-        if isinstance(exc, OSError):
-            code = getattr(exc, "winerror", None) or getattr(exc, "errno", None)
-            return code in (13, 98, 10013, 10048)
-        return False
-
-    fallbacks = [8080, 8765] if port not in (8080, 8765) else ([8765] if port == 8080 else [])
-    try:
-        server = _listen(port)
-        server.serve_forever()
-    except (PermissionError, OSError) as e:
-        if not _bind_error(e):
-            raise
-        for fb in fallbacks:
-            try:
-                print(f"Port {port} tidak tersedia — coba {fb}")
-                _listen(fb).serve_forever()
-                return
-            except (PermissionError, OSError) as e2:
-                if not _bind_error(e2):
-                    raise
-        raise
+    server = SkinjectHTTPServer((host, port), SkinjectHandler)
+    print("")
+    print(f"  {APP_NAME} Web — by {AUTHOR}")
+    print(f"  http://localhost:{port}")
+    print(f"  http://127.0.0.1:{port}")
+    print(f"  Buka dari HP: http://<IP-device>:{port}")
+    if port != 80:
+        print(f"  [i] Port 80 butuh root — jalankan: python server.py --port 80")
+    print("")
+    server.serve_forever()
