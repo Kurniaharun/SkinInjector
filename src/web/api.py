@@ -75,9 +75,14 @@ class WebApi:
         }
 
     def heroes(self) -> dict[str, Any]:
-        groups = read_json("heroes", {})
-        names = sorted(groups.keys(), key=str.lower)
-        return {"heroes": names}
+        icons = self.app.api.hero_icon_map()
+        names = sorted(icons.keys(), key=str.lower)
+        return {
+            "heroes": [
+                {"name": name, "label": name, "image_url": icons.get(name, "")}
+                for name in names
+            ]
+        }
 
     def roles(self) -> dict[str, Any]:
         cats = read_json("role_categories", [])
@@ -86,7 +91,14 @@ class WebApi:
 
     def role_heroes(self, role: str) -> dict[str, Any]:
         by_role = read_json("heroes_by_role", {})
-        return {"heroes": by_role.get(role, [])}
+        icons = self.app.api.hero_icon_map()
+        heroes = by_role.get(role, [])
+        return {
+            "heroes": [
+                {"name": name, "label": name, "image_url": icons.get(name, "")}
+                for name in heroes
+            ]
+        }
 
     def upgrade_menu(self) -> dict[str, Any]:
         menu = read_json("upgrade_menu", [])

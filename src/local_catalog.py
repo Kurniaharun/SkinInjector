@@ -24,6 +24,20 @@ def _parse_hero_entries(hero: str, entries: list, corpus: set[str]) -> list[Skin
     return out
 
 
+def _icon_from_entries(entries: list[dict[str, Any]]) -> str:
+    """Icon hero = gambar skin BACKUP (portrait official)."""
+    fallback = ""
+    for x in entries:
+        img = str(x.get("img", ""))
+        if img and not fallback:
+            fallback = img
+        raw = str(x.get("heroname", x.get("name", ""))).lower()
+        dl = str(x.get("downloadLink", x.get("url", ""))).lower()
+        if "backup" in raw or "backup" in dl:
+            return img
+    return fallback
+
+
 def _parse_upgrade_entries(cat: str, entries: list, corpus: set[str]) -> list[SkinItem]:
     return [
         SkinItem.from_upgrade_entry(x, cat, corpus)
@@ -317,6 +331,21 @@ class LocalCatalog:
     def list_hero_names(self, refresh: bool = False) -> list[str]:
         self.warmup()
         return self._hero_names
+
+    def get_hero_icon(self, hero_name: str) -> str:
+        self.warmup()
+        entries = self._heroes_raw.get(hero_name, [])
+        if not entries:
+            lk = _lc_key(hero_name)
+            for key, val in self._heroes_raw.items():
+                if key.lower() == lk:
+                    entries = val
+                    break
+        return _icon_from_entries(entries)
+
+    def hero_icon_map(self) -> dict[str, str]:
+        self.warmup()
+        return {hero: _icon_from_entries(entries) for hero, entries in self._heroes_raw.items()}
 
     def get_skins_for_hero(self, hero_name: str, refresh: bool = False) -> list[SkinItem]:
         self.warmup()

@@ -1,5 +1,16 @@
+import { icon } from "./icons.js";
+
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => document.querySelectorAll(sel);
+
+function normalizeHeroItem(h) {
+  if (typeof h === "string") return { name: h, label: h, image_url: "" };
+  return {
+    name: h.name || h.label || "",
+    label: h.label || h.name || "",
+    image_url: h.image_url || "",
+  };
+}
 
 const state = {
   mode: "home",
@@ -20,13 +31,16 @@ const views = {
 const els = {
   back: $("#btn-back"),
   statusBtn: $("#btn-status"),
+  pageSub: $("#page-sub"),
   listItems: $("#list-items"),
   listSearch: $("#list-search"),
   listSearchWrap: $("#list-search-wrap"),
   skinGrid: $("#skin-grid"),
   skinSearch: $("#skin-search"),
   skinSearchWrap: $("#skin-search-wrap"),
+  skinCount: $("#skin-count"),
   modal: $("#modal-overlay"),
+  modalClose: $("#modal-close"),
   modalImg: $("#modal-img"),
   modalTitle: $("#modal-title"),
   modalSub: $("#modal-sub"),
@@ -38,6 +52,8 @@ const els = {
   statusCard: $("#status-card"),
 };
 
+const CHEVRON = icon("chevron-right");
+
 async function api(path, opts = {}) {
   const res = await fetch(path, {
     headers: { "Content-Type": "application/json" },
@@ -48,10 +64,15 @@ async function api(path, opts = {}) {
   return data;
 }
 
+function setPageSub(text) {
+  if (els.pageSub) els.pageSub.textContent = text;
+}
+
 function showView(name) {
   Object.values(views).forEach((v) => v.classList.remove("active"));
   if (views[name]) views[name].classList.add("active");
   els.back.classList.toggle("hidden", name === "home");
+  if (name === "home") setPageSub("by KurrXd · v2.0");
 }
 
 function setLoading(on, text = "Memuat...") {
@@ -69,6 +90,7 @@ function toast(msg, type = "") {
 function goHome() {
   state.stack = [];
   state.mode = "home";
+  state.title = "";
   showView("home");
 }
 
@@ -77,6 +99,7 @@ function pushNav(mode, title, data = []) {
   state.mode = mode;
   state.title = title;
   state.listData = data;
+  setPageSub(title);
 }
 
 function goBack() {
@@ -88,6 +111,7 @@ function goBack() {
   state.skins = prev.skins;
 
   if (state.mode === "home") return goHome();
+  setPageSub(state.title || "SkinJECT");
   if (state.skins?.length) {
     showView("skins");
     renderSkins(state.skins);
@@ -99,8 +123,15 @@ function goBack() {
 
 function placeholderImg() {
   return "data:image/svg+xml," + encodeURIComponent(
-    '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="260"><rect fill="#1a1030" width="200" height="260"/><text x="50%" y="50%" fill="#666" font-size="14" text-anchor="middle" dy=".3em">No Image</text></svg>'
+    '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="260"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#1a1030"/><stop offset="1" stop-color="#0a0618"/></linearGradient></defs><rect fill="url(#g)" width="200" height="260"/><text x="50%" y="50%" fill="#666" font-size="13" font-family="sans-serif" text-anchor="middle" dy=".3em">No Image</text></svg>'
   );
+}
+
+function listThumb(it, label) {
+  if (it.image_url) {
+    return `<img class="hero-icon" src="${esc(it.image_url)}" alt="" loading="lazy" onerror="this.classList.add('broken')" />`;
+  }
+  return `<span class="hero-icon hero-icon-fallback" aria-hidden="true">${esc(String(label || "?")[0])}</span>`;
 }
 
 function renderList(items, filter = "") {
@@ -117,10 +148,9 @@ function renderList(items, filter = "") {
   els.listItems.innerHTML = filtered
     .map((it) => {
       const label = it.label || it.name || it;
-      const img = it.image_url ? `<img src="${esc(it.image_url)}" alt="" loading="lazy" onerror="this.style.display='none'" />` : "";
       const payload = esc(JSON.stringify(it));
       return `<button type="button" class="list-item" data-payload='${payload}'>
-        ${img}<span>${esc(label)}</span><span class="arrow">›</span>
+        ${listThumb(it, label)}<span class="item-label">${esc(label)}</span><span class="arrow">${CHEVRON}</span>
       </button>`;
     })
     .join("");
@@ -133,11 +163,21 @@ function renderList(items, filter = "") {
   });
 }
 
+function updateSkinCount(n) {
+  if (!els.skinCount) return;
+  if (!n) {
+    els.skinCount.classList.add("hidden");
+    return;
+  }
+  els.skinCount.textContent = `${n} skin`;
+  els.skinCount.classList.remove("hidden");
+}
+
 function renderSkins(skins, filter = "") {
   const q = filter.trim().toLowerCase();
-  const filtered = q
-    ? skins.filter((s) => (s.label || "").toLowerCase().includes(q))
-    : skins;
+  const filtered = q ? skins.filter((s) => (s.label || "").toLowerCase().includes(q)) : skins;
+
+  updateSkinCount(filtered.length);
 
   if (!filtered.length) {
     els.skinGrid.innerHTML = '<p class="empty-state">Skin tidak ditemukan.</p>';
@@ -148,9 +188,12 @@ function renderSkins(skins, filter = "") {
     .map(
       (s) => `
     <article class="skin-card" data-id="${esc(s.id)}" tabindex="0" role="button">
-      <img class="skin-banner" src="${esc(s.image_url || placeholderImg())}" alt="${esc(s.label)}" loading="lazy"
-        onerror="this.src='${placeholderImg()}'" />
-      <p class="skin-name">${esc(s.label || s.skin_name || "Skin")}</p>
+      <div class="skin-banner-wrap">
+        <img class="skin-banner" src="${esc(s.image_url || placeholderImg())}" alt="${esc(s.label)}" loading="lazy"
+          onerror="this.src='${placeholderImg()}'" />
+        <div class="skin-banner-shade"></div>
+        <p class="skin-name">${esc(s.label || s.skin_name || "Skin")}</p>
+      </div>
     </article>`
     )
     .join("");
@@ -181,8 +224,8 @@ function openModal(skin) {
   state.pendingSkin = skin;
   els.modalImg.src = skin.image_url || placeholderImg();
   els.modalImg.onerror = () => { els.modalImg.src = placeholderImg(); };
-  els.modalTitle.textContent = "Inject skin ini?";
-  els.modalSub.textContent = skin.label || `${skin.hero_name} — ${skin.skin_name}`;
+  els.modalTitle.textContent = skin.label || `${skin.hero_name} — ${skin.skin_name}`;
+  els.modalSub.textContent = "Skin akan di-download dan di-inject ke folder MLBB.";
   els.modalYes.disabled = false;
   els.modal.classList.remove("hidden");
 }
@@ -218,7 +261,7 @@ async function loadHeroes() {
   setLoading(true);
   try {
     const { heroes } = await api("/api/heroes");
-    state.listData = heroes.map((h) => ({ name: h, label: h }));
+    state.listData = heroes.map(normalizeHeroItem);
     showView("list");
     els.listSearchWrap.classList.remove("hidden");
     els.listSearch.value = "";
@@ -254,7 +297,7 @@ async function loadRoleHeroes(role) {
   setLoading(true);
   try {
     const { heroes } = await api(`/api/roles/${encodeURIComponent(role)}/heroes`);
-    state.listData = heroes.map((h) => ({ name: h, label: h, role }));
+    state.listData = heroes.map((h) => ({ ...normalizeHeroItem(h), role }));
     showView("list");
     els.listSearch.value = "";
     renderList(state.listData);
@@ -383,19 +426,21 @@ async function loadEffectSkins(cat) {
 }
 
 async function loadSearch() {
-  pushNav("search", "Search");
+  pushNav("search", "Search Skin");
   state.skins = [];
   showView("skins");
   els.skinSearchWrap.classList.remove("hidden");
   els.skinSearch.value = "";
   els.skinSearch.placeholder = "Ketik nama hero / skin...";
-  els.skinGrid.innerHTML = '<p class="empty-state">Ketik di atas lalu Enter untuk mencari.</p>';
+  updateSkinCount(0);
+  els.skinGrid.innerHTML = '<p class="empty-state">Ketik minimal 2 karakter untuk mencari.</p>';
 
   let debounce;
   els.skinSearch.oninput = () => {
     clearTimeout(debounce);
     const q = els.skinSearch.value.trim();
     if (q.length < 2) {
+      updateSkinCount(0);
       els.skinGrid.innerHTML = '<p class="empty-state">Minimal 2 karakter.</p>';
       return;
     }
@@ -417,29 +462,35 @@ async function runSearch(q) {
 }
 
 async function loadStatus() {
-  pushNav("status", "Status");
+  pushNav("status", "Status Sistem");
   showView("status");
   els.statusCard.innerHTML = '<div class="loader"></div><p>Memuat status...</p>';
   try {
     const st = await api("/api/status");
     const ok = st.ok ? "status-ok" : "status-bad";
     els.statusCard.innerHTML = `
-      <h3 style="margin-bottom:16px;font-size:1.1rem">Status Sistem</h3>
+      <div class="status-header">
+        <div class="status-header-icon">${icon("server")}</div>
+        <div>
+          <h3>Status Sistem</h3>
+          <p>${st.ok ? "Siap inject" : "Belum siap"}</p>
+        </div>
+      </div>
       <div class="status-row"><span>Backend</span><span>${esc(st.backend || "-")}</span></div>
       <div class="status-row"><span>Package MLBB</span><span>${esc(st.package || "-")}</span></div>
-      <div class="status-row"><span>Assets path</span><span style="font-size:0.75rem;word-break:break-all">${esc(st.assets_path || "-")}</span></div>
+      <div class="status-row"><span>Assets path</span><span>${esc(st.assets_path || "-")}</span></div>
       <div class="status-row"><span>Katalog</span><span>${esc(st.catalog || "-")}</span></div>
       <div class="status-row"><span>Heroes</span><span>${st.heroes ?? "-"}</span></div>
       <div class="status-row"><span>Siap inject</span><span class="${ok}">${st.ok ? "Ya" : "Tidak"}</span></div>
     `;
     els.statusBtn.classList.toggle("online", !!st.ok);
   } catch (e) {
-    els.statusCard.innerHTML = `<p class="status-bad">${esc(String(e.message || e))}</p>`;
+    els.statusCard.innerHTML = `<p class="status-bad" style="padding:24px;text-align:center">${esc(String(e.message || e))}</p>`;
   }
 }
 
 function onListPick(item) {
-  if (state.mode === "heroes" || (state.mode === "role-heroes")) {
+  if (state.mode === "heroes" || state.mode === "role-heroes") {
     loadHeroSkins(item.name || item.label);
     return;
   }
@@ -480,6 +531,7 @@ $$(".menu-btn").forEach((btn) => {
 els.back.addEventListener("click", goBack);
 els.statusBtn.addEventListener("click", loadStatus);
 els.modalNo.addEventListener("click", closeModal);
+els.modalClose?.addEventListener("click", closeModal);
 els.modalYes.addEventListener("click", doInject);
 els.modal.addEventListener("click", (e) => {
   if (e.target === els.modal) closeModal();
