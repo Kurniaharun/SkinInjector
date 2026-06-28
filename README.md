@@ -157,6 +157,11 @@ SkinInjector/
     ├── cache/           # cache API
     ├── downloads/       # ZIP temp
     └── backups/         # backup skin default
+
+### Android APK (Flutter)
+
+Folder `android/` — aplikasi **SkinJECT** native Android (Root + Shizuku).  
+Lihat [android/README.md](android/README.md) untuk build APK.
 ```
 
 ---
