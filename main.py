@@ -53,10 +53,6 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--hero-id", help="ID hero dari backup")
     sp.add_argument("--all", action="store_true", dest="restore_all")
 
-    sp = sub.add_parser("web", help="Jalankan web UI (default port 8080)")
-    sp.add_argument("--host", default="0.0.0.0", help="Bind address")
-    sp.add_argument("--port", type=int, default=8080, help="Port HTTP (80 butuh root)")
-
     return p
 
 
@@ -170,11 +166,6 @@ def main() -> int:
         return cmd_inject(app, args.hero, args.skin, args.dry_run)
     if cmd == "restore":
         return cmd_restore(app, args.hero_id, args.restore_all)
-    if cmd == "web":
-        from src.web import run_server
-
-        run_server(host=args.host, port=args.port)
-        return 0
     parser.print_help()
     return 0
 
