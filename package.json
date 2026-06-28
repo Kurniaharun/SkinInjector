@@ -1,0 +1,13 @@
+{
+  "name": "skinject-web",
+  "version": "2.0.0",
+  "description": "SkinJECT Web UI — by KurrXd",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "web": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
